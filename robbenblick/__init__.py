@@ -8,7 +8,7 @@ from loguru import logger  # noqa: F401
 load_dotenv()
 
 try:
-    __version__ = version("robben_blick")
+    __version__ = version("robbenblick")
 except metadata.PackageNotFoundError:
     # Case where package metadata is not available.
     __version__ = ""

@@ -23,6 +23,18 @@ data/robben/annotations.xml
 ```
 Run fiftyone: 
 ```
-python run_fiftyone.py
+python -m robbenblick.run_fiftyone --dataset cvat --recreate
 ```
 
+# Known issues 
+
+## FiftyOne 
+### failed to bind port 
+If you get the error
+```fiftyone.core.service.ServiceListenTimeout: fiftyone.core.service.DatabaseService failed to bind to port``` 
+Try to kill the sessions with 
+```
+pkill -f fiftyone
+pkill -f mongod
+```
+and try again. 
