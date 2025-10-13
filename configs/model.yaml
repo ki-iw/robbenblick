@@ -1,0 +1,12 @@
+# Data and Model Paths
+data_yaml_path: 'data/processed/dataset_yolo/data.yaml'
+model: 'yolov8n.pt'
+
+# Training Parameters
+epochs: 50
+image_size: 640
+batch_size: 16
+
+# Experiment Tracking (Controls where YOLO saves the output)
+project_name: 'seal_detection_runs'
+run_name: "exp_epochs${epochs}_img${image_size}_bs${batch_size}"

@@ -1,8 +1,8 @@
 from importlib import metadata
 from importlib.metadata import version
+from pathlib import Path
 
 from dotenv import load_dotenv
-import os
 from loguru import logger  # noqa: F401
 
 load_dotenv()
@@ -16,10 +16,14 @@ finally:
     del metadata  # optional, avoids polluting the results of dir(__package__)
 
 
-DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+DATA_PATH = Path(__file__).resolve().parent.parent / "data"
 
-logger.info("Data path set to: {}", DATA_PATH)
+MODEL_CONFIG_PATH = Path(__file__).resolve().parent.parent / "configs"
+
+logger.info(f"Data path set to: {DATA_PATH}")
+logger.info(f"Config path set to: {MODEL_CONFIG_PATH}")
 
 __all__ = [
     "DATA_PATH",
+    "MODEL_CONFIG_PATH",
 ]
