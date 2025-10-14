@@ -1,11 +1,14 @@
 # Data and Model Paths
 data_yaml_path: 'data/processed/dataset_yolo/data.yaml'
-model: 'yolov8n.pt'
+model: 'yolov8n.pt' # Change this for another yolo model
 
 # Training Parameters
 epochs: 50
 image_size: 640
 batch_size: 16
+
+# Prediction parameters
+confidence_thresh: 0.25
 
 # Experiment
 project_name: 'Robbenblick'

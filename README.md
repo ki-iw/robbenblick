@@ -47,7 +47,7 @@ This repository provides a pipeline for:
   - Launches the FiftyOne app .
 - **Run:**
   ```
-  python -m robbenblick.run_fiftyone --run_id <name-of-run> --dataset cvat --recreate
+  python -m robbenblick.run_fiftyone --dataset cvat --recreate
   python -m robbenblick.run_fiftyone --run_id <name-of-run> --dataset yolo --recreate
   ```
 
@@ -78,7 +78,7 @@ pre-commit run
   ```
   python -m robbenblick.run_fiftyone --dataset cvat --recreate
   ```
-- If `.tif` images, they will be converted and saved as "png".
+- If `.tif` images, they will be converted and saved as "png", this takes a few moment.
 
 
 ## Known Issues

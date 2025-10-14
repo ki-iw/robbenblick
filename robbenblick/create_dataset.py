@@ -133,6 +133,7 @@ def process_images(image_files, annotations, class_to_id, split):
                     continue
 
                 tile_labels = []
+
                 for poly_info in img_annotations["polygons"]:
                     bbox = polygon_to_bbox(poly_info["points"])
 
@@ -154,29 +155,41 @@ def process_images(image_files, annotations, class_to_id, split):
                             intersect_y_max - tile_y_min,
                         ]
 
+                        if (
+                            local_bbox[2] <= local_bbox[0]
+                            or local_bbox[3] <= local_bbox[1]
+                        ):
+                            logger.warning(
+                                f"Invalid bbox in image {image_name}, skipping bbox."
+                            )
+                            continue
+
+                        if (local_bbox[2] - local_bbox[0]) * (
+                            local_bbox[3] - local_bbox[1]
+                        ) < (tile_h * tile_w * 0.0001):
+                            logger.warning(
+                                f"Small bbox in image {image_name}, skipping bbox."
+                            )
+                            continue
+
                         # Convert to YOLO format
                         yolo_bbox = convert_to_yolo_format(local_bbox, tile_w, tile_h)
                         class_id = class_to_id[poly_info["label"]]
+
                         tile_labels.append(
                             f"{class_id} {' '.join(map(str, yolo_bbox))}"
                         )
 
                 # Only save tiles that have labels
+                should_save = tile_labels or not dataset_config.save_only_with_labels
 
-                if dataset_config.save_only_with_labels and tile_labels:
+                if should_save:
                     base_filename = f"{Path(image_name).stem}_tile_{y}_{x}"
                     img_save_path = img_output_dir / f"{base_filename}.jpg"
                     label_save_path = label_output_dir / f"{base_filename}.txt"
 
                     cv2.imwrite(str(img_save_path), tile_img)
-                    with open(label_save_path, "w") as f:
-                        f.write("\n".join(tile_labels))
-                elif not dataset_config.save_only_with_labels:
-                    base_filename = f"{Path(image_name).stem}_tile_{y}_{x}"
-                    img_save_path = img_output_dir / f"{base_filename}.jpg"
-                    label_save_path = label_output_dir / f"{base_filename}.txt"
 
-                    cv2.imwrite(str(img_save_path), tile_img)
                     with open(label_save_path, "w") as f:
                         f.write("\n".join(tile_labels))
 

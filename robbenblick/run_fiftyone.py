@@ -45,7 +45,11 @@ def fo_yolo_dataset(
     )
 
     model = YOLO(f"runs/detect/{run_id}/weights/best.pt")
-    dataset.apply_model(model, label_field="predictions", confidence_thresh=0.4)
+    dataset.apply_model(
+        model,
+        label_field="predictions",
+        confidence_thresh=model_config.confidence_thresh,
+    )
 
     return dataset
 

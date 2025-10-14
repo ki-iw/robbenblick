@@ -35,6 +35,7 @@ def train(run_id=model_config.run_id):
             batch=model_config.batch_size,
             device=device,
             name=run_id,
+            task="detect",
         )
         logger.info("Training complete! 🎉")
 
