@@ -1,0 +1,8 @@
+
+# Configuration for dataset creation
+tile_size: 640
+tile_overlap: 0.2
+train_ratio: 0.8
+
+# Save only tiles with labels. Set to false to save all tiles.
+save_only_with_labels: false

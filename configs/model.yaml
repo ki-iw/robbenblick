@@ -1,0 +1,12 @@
+# Data and Model Paths
+data_yaml_path: 'data/processed/dataset_yolo/data.yaml'
+model: 'yolov8n.pt'
+
+# Training Parameters
+epochs: 50
+image_size: 640
+batch_size: 16
+
+# Experiment
+project_name: 'Robbenblick'
+run_id: testing # TODO: Change this to something dynamic or timestamp based
