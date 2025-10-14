@@ -2,7 +2,9 @@ from importlib import metadata
 from importlib.metadata import version
 from pathlib import Path
 
+import yaml
 from dotenv import load_dotenv
+from dotmap import DotMap
 from loguru import logger  # noqa: F401
 
 load_dotenv()
@@ -17,13 +19,15 @@ finally:
 
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data"
-
-MODEL_CONFIG_PATH = Path(__file__).resolve().parent.parent / "configs"
+CONFIG_PATH = Path(__file__).resolve().parent.parent / "configs"
 
 logger.info(f"Data path set to: {DATA_PATH}")
-logger.info(f"Config path set to: {MODEL_CONFIG_PATH}")
+logger.info(f"Config path set to: {CONFIG_PATH}")
 
-__all__ = [
-    "DATA_PATH",
-    "MODEL_CONFIG_PATH",
-]
+
+dataset_config = DotMap(
+    yaml.safe_load((CONFIG_PATH / "create_dataset.yaml").read_text())
+)
+model_config = DotMap(yaml.safe_load((CONFIG_PATH / "model.yaml").read_text()))
+
+__all__ = ["DATA_PATH", "dataset_config", "model_config"]

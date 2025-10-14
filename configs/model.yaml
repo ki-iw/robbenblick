@@ -7,6 +7,6 @@ epochs: 50
 image_size: 640
 batch_size: 16
 
-# Experiment Tracking (Controls where YOLO saves the output)
-project_name: 'seal_detection_runs'
-run_name: "exp_epochs${epochs}_img${image_size}_bs${batch_size}"
+# Experiment
+project_name: 'Robbenblick'
+run_id: testing # TODO: Change this to something dynamic or timestamp based

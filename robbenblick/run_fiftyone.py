@@ -1,10 +1,9 @@
 import argparse
-from pathlib import Path
 
 import fiftyone as fo
-import fiftyone.utils.yolo as fouy
+from ultralytics import YOLO
 
-from robbenblick import DATA_PATH, logger
+from robbenblick import DATA_PATH, logger, model_config
 from robbenblick.utils import convert_tif_to_png, convert_xml_tif_to_png
 
 
@@ -26,23 +25,28 @@ def fo_cvat_dataset(xml_path, images_dir):
     return dataset
 
 
-def fo_yolo_dataset(images_dir, labels_dir, classes=None):
+def fo_yolo_dataset(
+    labels_dir: str, images_dir: str, run_id=model_config.run_id, classes=None
+):
     """
     Launch FiftyOne app to visualize YOLOv8 segmentation data.
 
     Args:
-        images_dir (str): Path to directory with images.
+        images_dir (str): Path to directory test images
         labels_dir (str): Path to directory with YOLOv8 .txt annotation files.
         classes (list, optional): List of class names. Defaults to None.
     """
     dataset = fo.Dataset.from_dir(
-        dataset_type=fo.types.YOLOv5Dataset,  # Supports YOLOv5 and YOLOv8
-        data_path=images_dir,
-        labels_path=labels_dir,
-        name="yolo_segmentation",
-        classers=classes,
+        dataset_type=fo.types.ImageDirectory,  # Supports YOLOv5 and YOLOv8
+        dataset_dir=images_dir,
+        # labels_path=labels_dir,
+        name=run_id,
+        # label_field="predictions"
     )
-    # session = fo.launch_app(dataset)
+
+    model = YOLO(f"runs/detect/{run_id}/weights/best.pt")
+    dataset.apply_model(model, label_field="predictions", confidence_thresh=0.4)
+
     return dataset
 
 
@@ -55,7 +59,14 @@ if __name__ == "__main__":
         choices=["yolo", "cvat"],
         default="cvat",
         required=False,
-        help="Choose which annotation format to visualize.",
+        help="Raw data (cvat) or YOLO predictions.",
+    )
+
+    parser.add_argument(
+        "--run_id",
+        type=str,
+        default=model_config.run_id,
+        help="Path to the directory containing images.",
     )
     parser.add_argument(
         "--recreate",
@@ -65,9 +76,19 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.dataset == "yolo":
-        image_dir = DATA_PATH / "yolo_tiles" / "images"
-        labels_dir = DATA_PATH / "yolo_tiles" / "annotations"
-        dataset = fo_yolo_dataset(image_dir, labels_dir, 0)
+        # Test images
+        if args.recreate:
+            if args.run_id in fo.list_datasets():
+                logger.info(f"Deleting dataset '{args.run_id}' to recreate it.")
+                fo.delete_dataset(args.run_id)
+
+        image_dir = str(DATA_PATH / "processed" / "dataset_yolo" / "images" / "test")
+
+        labels_dir = f"runs/detect/{args.run_id}_predict/labels"
+        dataset = fo_yolo_dataset(
+            labels_dir=labels_dir, images_dir=image_dir, run_id=args.run_id, classes=0
+        )
+
     elif args.dataset == "cvat":
         xml_path = DATA_PATH / "raw" / "annotations.xml"
         image_dir = DATA_PATH / "raw" / "images"

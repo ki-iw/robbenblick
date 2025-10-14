@@ -1,4 +1,3 @@
-import os
 import random
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -7,7 +6,7 @@ import cv2
 import yaml
 from tqdm import tqdm
 
-from robbenblick import DATA_PATH, logger
+from robbenblick import DATA_PATH, dataset_config, logger
 
 # --- CONFIGURATION ---
 # Input paths
@@ -17,14 +16,12 @@ XML_PATH = DATA_PATH / "raw" / "annotations.xml"
 # Output paths
 OUTPUT_DIR = DATA_PATH / "processed" / "dataset_yolo"
 
-# Tiling parameters
-TILE_SIZE = 640
-TILE_OVERLAP = 0.2  # 20% overlap
 
-# Data split ratio
-TRAIN_RATIO = 0.8
-
-# --- SCRIPT ---
+# Tiling parameters and data split ratio from config
+logger.info(
+    f"Tile size: {dataset_config.tile_size}, Tile overlap: {dataset_config.tile_overlap}, Train ratio: {dataset_config.train_ratio}"
+)
+logger.info(f"Save only tiles with labels: {dataset_config.save_only_with_labels}")
 
 
 def parse_cvat_xml(xml_file):
@@ -113,20 +110,26 @@ def process_images(image_files, annotations, class_to_id, split):
 
         img_h, img_w, _ = img.shape
 
-        step_size = int(TILE_SIZE * (1 - TILE_OVERLAP))
+        step_size = int(dataset_config.tile_size * (1 - dataset_config.tile_overlap))
 
         for y in range(0, img_h, step_size):
             for x in range(0, img_w, step_size):
                 # Define tile boundaries
                 tile_x_min, tile_y_min = x, y
-                tile_x_max, tile_y_max = x + TILE_SIZE, y + TILE_SIZE
+                tile_x_max, tile_y_max = (
+                    x + dataset_config.tile_size,
+                    y + dataset_config.tile_size,
+                )
 
                 # Extract the tile
                 tile_img = img[tile_y_min:tile_y_max, tile_x_min:tile_x_max]
                 tile_h, tile_w, _ = tile_img.shape
 
                 # Skip tiny tiles at the edges
-                if tile_h < TILE_SIZE * 0.25 or tile_w < TILE_SIZE * 0.25:
+                if (
+                    tile_h < dataset_config.tile_size * 0.25
+                    or tile_w < dataset_config.tile_size * 0.25
+                ):
                     continue
 
                 tile_labels = []
@@ -159,7 +162,16 @@ def process_images(image_files, annotations, class_to_id, split):
                         )
 
                 # Only save tiles that have labels
-                if tile_labels:
+
+                if dataset_config.save_only_with_labels and tile_labels:
+                    base_filename = f"{Path(image_name).stem}_tile_{y}_{x}"
+                    img_save_path = img_output_dir / f"{base_filename}.jpg"
+                    label_save_path = label_output_dir / f"{base_filename}.txt"
+
+                    cv2.imwrite(str(img_save_path), tile_img)
+                    with open(label_save_path, "w") as f:
+                        f.write("\n".join(tile_labels))
+                elif not dataset_config.save_only_with_labels:
                     base_filename = f"{Path(image_name).stem}_tile_{y}_{x}"
                     img_save_path = img_output_dir / f"{base_filename}.jpg"
                     label_save_path = label_output_dir / f"{base_filename}.txt"
@@ -172,7 +184,7 @@ def process_images(image_files, annotations, class_to_id, split):
 def create_yaml_file(class_names):
     """Creates the data.yaml file for YOLO training."""
     yaml_content = {
-        "path": f"../{OUTPUT_DIR.name}",  # Path relative to the YAML file location
+        # "path": .. not necessary, since the yaml file is in the right folder
         "train": "images/train",
         "val": "images/test",  # Using test set as validation
         "names": {i: name for i, name in enumerate(class_names)},
@@ -199,7 +211,7 @@ def main():
     all_image_files = list(annotations.keys())
     random.shuffle(all_image_files)
 
-    split_index = int(len(all_image_files) * TRAIN_RATIO)
+    split_index = int(len(all_image_files) * dataset_config.train_ratio)
     train_files = all_image_files[:split_index]
     test_files = all_image_files[split_index:]
 
