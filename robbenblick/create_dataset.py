@@ -209,7 +209,7 @@ def process_images(image_files, annotations, class_to_id, split, output_dir):
 
 
 def create_yaml_file(class_names, has_test_set, output_dir):
-    """Creates the data.yaml file for YOLO training."""
+    """Creates the dataset.yaml file for YOLO training."""
     yaml_content = {
         "train": "images/train",
         "val": "images/val",
@@ -219,10 +219,10 @@ def create_yaml_file(class_names, has_test_set, output_dir):
     if has_test_set:
         yaml_content["test"] = "images/test"
 
-    yaml_path = output_dir / "data.yaml"
+    yaml_path = output_dir / "dataset.yaml"
     with open(yaml_path, "w") as f:
         yaml.dump(yaml_content, f, sort_keys=False)
-    logger.info(f"Created data.yaml at {yaml_path}")
+    logger.info(f"Created dataset.yaml at {yaml_path}")
     logger.info("Dataset creation complete! 🎉")
 
 
