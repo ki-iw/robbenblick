@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from robbenblick import DATA_PATH, dataset_config, logger
 
-# Default paths
+# Default paths for the command-line arguments
 DEFAULT_RAW_DIR = DATA_PATH / "raw"
 DEFAULT_OUTPUT_DIR = DATA_PATH / "processed" / "dataset_yolo"
 
@@ -29,6 +29,7 @@ def parse_cvat_xml(xml_file):
     annotations = {}
     class_names = set()
 
+    # Read task name
     task_name_tag = root.find("meta/task/name")
     task_name = task_name_tag.text if task_name_tag is not None else "Unknown Task"
 
@@ -39,7 +40,7 @@ def parse_cvat_xml(xml_file):
 
         polygons = []
 
-        # Find <polyline> as well as <polygon> tags
+        # Find both <polyline> and <polygon> tags, as CVAT can export both.
         annotation_tags = image_tag.findall("polyline")
         annotation_tags.extend(image_tag.findall("polygon"))
 
@@ -88,9 +89,112 @@ def convert_to_yolo_format(bbox, img_width, img_height):
     return (x_center_norm, y_center_norm, width_norm, height_norm)
 
 
+def find_labels_for_tile(img_annotations, tile_coords, tile_dims, class_to_id):
+    """Finds all annotations within a tile and converts them to YOLO format."""
+    tile_x_min, tile_y_min, tile_x_max, tile_y_max = tile_coords
+    tile_w, tile_h = tile_dims
+    tile_labels = []
+
+    for poly_info in img_annotations["polygons"]:
+        bbox = polygon_to_bbox(poly_info["points"])
+
+        # Check for intersection between bbox and tile
+        intersect_x_min = max(bbox[0], tile_x_min)
+        intersect_y_min = max(bbox[1], tile_y_min)
+        intersect_x_max = min(bbox[2], tile_x_max)
+        intersect_y_max = min(bbox[3], tile_y_max)
+
+        if intersect_x_min < intersect_x_max and intersect_y_min < intersect_y_max:
+            # Convert intersection coords to tile-local coords
+            local_bbox = [
+                intersect_x_min - tile_x_min,
+                intersect_y_min - tile_y_min,
+                intersect_x_max - tile_x_min,
+                intersect_y_max - tile_y_min,
+            ]
+
+            # Skip invalid or tiny bboxes
+            if (local_bbox[2] <= local_bbox[0] or local_bbox[3] <= local_bbox[1]):
+                continue
+            if (local_bbox[2] - local_bbox[0]) * (
+                    local_bbox[3] - local_bbox[1]
+            ) < (tile_h * tile_w * 0.0001):
+                continue
+
+            # Convert to YOLO format
+            yolo_bbox = convert_to_yolo_format(local_bbox, tile_w, tile_h)
+            class_id = class_to_id[poly_info["label"]]
+
+            tile_labels.append(f"{class_id} {' '.join(map(str, yolo_bbox))}")
+
+    return tile_labels
+
+
+def save_tile(tile_img, tile_labels, base_filename, img_output_dir, label_output_dir):
+    """Saves a single tile image and its corresponding label file."""
+    img_save_path = img_output_dir / f"{base_filename}.jpg"
+    label_save_path = label_output_dir / f"{base_filename}.txt"
+
+    cv2.imwrite(str(img_save_path), tile_img)
+
+    with open(label_save_path, "w") as f:
+        f.write("\n".join(tile_labels))
+
+
+def tile_one_image(unique_key, annotations, class_to_id, img_output_dir, label_output_dir):
+    """Loads a single image, tiles it, and processes annotations for each tile."""
+    img_annotations = annotations[unique_key]
+    image_path = img_annotations["full_image_path"]
+
+    if not image_path.exists():
+        logger.warning(f"Image file not found for {image_path.name}, skipping.")
+        return
+
+    img = cv2.imread(str(image_path))
+    if img is None:
+        logger.warning(f"Could not read image {image_path.name}, skipping.")
+        return
+
+    img_h, img_w, _ = img.shape
+    step_size = int(dataset_config.tile_size * (1 - dataset_config.tile_overlap))
+
+    for y in range(0, img_h, step_size):
+        for x in range(0, img_w, step_size):
+            tile_x_min, tile_y_min = x, y
+            tile_x_max, tile_y_max = (
+                x + dataset_config.tile_size,
+                y + dataset_config.tile_size,
+            )
+
+            tile_img = img[tile_y_min:tile_y_max, tile_x_min:tile_x_max]
+            tile_h, tile_w, _ = tile_img.shape
+
+            # Skip tiny tiles at the edges
+            if (
+                    tile_h < dataset_config.tile_size * 0.25
+                    or tile_w < dataset_config.tile_size * 0.25
+            ):
+                continue
+
+            tile_coords = (tile_x_min, tile_y_min, tile_x_max, tile_y_max)
+            tile_dims = (tile_w, tile_h)
+
+            tile_labels = find_labels_for_tile(
+                img_annotations, tile_coords, tile_dims, class_to_id
+            )
+
+            # Only save tiles that have labels (or if config allows empty)
+            should_save = tile_labels or not dataset_config.save_only_with_labels
+            if should_save:
+                base_filename = f"{Path(unique_key).stem}_tile_{y}_{x}"
+                save_tile(
+                    tile_img, tile_labels, base_filename, img_output_dir, label_output_dir
+                )
+
+
 def process_images(image_files, annotations, class_to_id, split, output_dir):
     """Tiles images and converts annotations for a given split (train/val/test)."""
-    logger.info(f"Processing {split} set...")
+    logger.info(f"Processing {split} set ({len(image_files)} images)...")
 
     img_output_dir = output_dir / "images" / split
     label_output_dir = output_dir / "labels" / split
@@ -99,108 +203,9 @@ def process_images(image_files, annotations, class_to_id, split, output_dir):
     label_output_dir.mkdir(parents=True, exist_ok=True)
 
     for unique_key in tqdm(image_files, desc=f"Tiling {split} images"):
-        img_annotations = annotations[unique_key]
-
-        image_path = img_annotations["full_image_path"]
-
-        # De-comment for very detailed logging
-        # logger.info(
-        #     f"Processing image: {image_path.name}, number of polygons: {len(img_annotations['polygons'])}"
-        # )
-
-        if not image_path.exists():
-            logger.warning(f"Image file not found for {image_path.name}, skipping.")
-            continue
-
-        img = cv2.imread(str(image_path))
-        if img is None:
-            logger.warning(f"Could not read image {image_path.name}, skipping.")
-            continue
-
-        img_h, img_w, _ = img.shape
-
-        step_size = int(dataset_config.tile_size * (1 - dataset_config.tile_overlap))
-
-        for y in range(0, img_h, step_size):
-            for x in range(0, img_w, step_size):
-                # Define tile boundaries
-                tile_x_min, tile_y_min = x, y
-                tile_x_max, tile_y_max = (
-                    x + dataset_config.tile_size,
-                    y + dataset_config.tile_size,
-                )
-
-                # Extract the tile
-                tile_img = img[tile_y_min:tile_y_max, tile_x_min:tile_x_max]
-                tile_h, tile_w, _ = tile_img.shape
-
-                # Skip tiny tiles at the edges
-                if (
-                        tile_h < dataset_config.tile_size * 0.25
-                        or tile_w < dataset_config.tile_size * 0.25
-                ):
-                    continue
-
-                tile_labels = []
-
-                for poly_info in img_annotations["polygons"]:
-                    bbox = polygon_to_bbox(poly_info["points"])
-
-                    # Check for intersection between bbox and tile
-                    intersect_x_min = max(bbox[0], tile_x_min)
-                    intersect_y_min = max(bbox[1], tile_y_min)
-                    intersect_x_max = min(bbox[2], tile_x_max)
-                    intersect_y_max = min(bbox[3], tile_y_max)
-
-                    if (
-                            intersect_x_min < intersect_x_max
-                            and intersect_y_min < intersect_y_max
-                    ):
-                        # Convert intersection coords to tile-local coords
-                        local_bbox = [
-                            intersect_x_min - tile_x_min,
-                            intersect_y_min - tile_y_min,
-                            intersect_x_max - tile_x_min,
-                            intersect_y_max - tile_y_min,
-                        ]
-
-                        if (
-                                local_bbox[2] <= local_bbox[0]
-                                or local_bbox[3] <= local_bbox[1]
-                        ):
-                            # logger.warning(
-                            #     f"Invalid bbox in image {image_path.name}, skipping bbox."
-                            # )
-                            continue
-
-                        if (local_bbox[2] - local_bbox[0]) * (
-                                local_bbox[3] - local_bbox[1]
-                        ) < (tile_h * tile_w * 0.0001):
-                            # logger.warning(
-                            #     f"Small bbox in image {image_path.name}, skipping bbox."
-                            # )
-                            continue
-
-                        # Convert to YOLO format
-                        yolo_bbox = convert_to_yolo_format(local_bbox, tile_w, tile_h)
-                        class_id = class_to_id[poly_info["label"]]
-
-                        tile_labels.append(
-                            f"{class_id} {' '.join(map(str, yolo_bbox))}"
-                        )
-
-                # Only save tiles that have labels
-                should_save = tile_labels or not dataset_config.save_only_with_labels
-
-                if should_save:
-                    base_filename = f"{Path(unique_key).stem}_tile_{y}_{x}"
-                    img_save_path = img_output_dir / f"{base_filename}.jpg"
-                    label_save_path = label_output_dir / f"{base_filename}.txt"
-
-                    cv2.imwrite(str(img_save_path), tile_img)
-
-                    with open(label_save_path, "w") as f:
-                        f.write("\n".join(tile_labels))
+        tile_one_image(
+            unique_key, annotations, class_to_id, img_output_dir, label_output_dir
+        )
 
 
 def create_yaml_file(class_names, has_test_set, output_dir):
@@ -221,27 +226,18 @@ def create_yaml_file(class_names, has_test_set, output_dir):
     logger.info("Dataset creation complete! 🎉")
 
 
-def main(stats_only=False, test_dir_index=None, val_ratio=0.2,
-         raw_dir=DEFAULT_RAW_DIR, output_dir=DEFAULT_OUTPUT_DIR):
-    """Main function to run the script."""
-
+def load_and_prepare_data(raw_dir):
+    """--- Step 1: Load and Prepare Data ---"""
     logger.info(f"Scanning for datasets in {raw_dir}...")
 
     all_annotations = {}
-    all_class_names = set()
     dataset_batches = []
-
-    total_annotations_count = 0
-    total_image_count = 0
-    overall_class_distribution = collections.defaultdict(int)
-
     source_dirs = sorted([d for d in raw_dir.iterdir() if d.is_dir()])
 
     if not source_dirs:
         logger.error(f"No dataset subdirectories found in {raw_dir}. Exiting.")
-        return
+        return None, None
 
-    # Step 1: read all datasets
     for src_dir in source_dirs:
         logger.info(f"Scanning dataset: {src_dir.name}")
         xml_file = src_dir / "annotations.xml"
@@ -255,9 +251,7 @@ def main(stats_only=False, test_dir_index=None, val_ratio=0.2,
             continue
 
         annotations_batch, class_names_batch, task_name = parse_cvat_xml(xml_file)
-        all_class_names.update(class_names_batch)
 
-        # Enrich annotations dict with full path and store for batch
         processed_annotations = {}
         for image_name, data in annotations_batch.items():
             unique_key = f"{src_dir.name}_{image_name}"
@@ -266,7 +260,7 @@ def main(stats_only=False, test_dir_index=None, val_ratio=0.2,
                 logger.warning(f"Duplicate unique key '{unique_key}' found. Overwriting previous entry.")
 
             processed_annotations[unique_key] = data
-            all_annotations[unique_key] = data  # Globales Dict für process_images
+            all_annotations[unique_key] = data  # Global dict for process_images
 
         dataset_batches.append({
             "name": src_dir.name,
@@ -275,9 +269,18 @@ def main(stats_only=False, test_dir_index=None, val_ratio=0.2,
             "class_names": class_names_batch
         })
 
-    # --- Step 2: show enumerated statistics
+    return dataset_batches, all_annotations
+
+
+def print_dataset_statistics(dataset_batches):
+    """--- Step 2: Print Dataset Statistics ---"""
     logger.info("=" * 30)
     logger.info("--- 📊 DATASET STATISTICS ---")
+
+    all_class_names = set()
+    total_annotations_count = 0
+    total_image_count = 0
+    overall_class_distribution = collections.defaultdict(int)
 
     for i, batch in enumerate(dataset_batches):
         batch_class_distribution = collections.defaultdict(int)
@@ -286,6 +289,7 @@ def main(stats_only=False, test_dir_index=None, val_ratio=0.2,
         for data in batch["annotations"].values():
             num_polygons = len(data["polygons"])
             num_annotations_in_batch += num_polygons
+            all_class_names.update(batch["class_names"])
             for poly in data["polygons"]:
                 label = poly["label"]
                 batch_class_distribution[label] += 1
@@ -315,22 +319,20 @@ def main(stats_only=False, test_dir_index=None, val_ratio=0.2,
         logger.info(f"  - {label}: {count}")
     logger.info("=" * 30)
 
-    if stats_only:
-        logger.info("Stats-only mode finished. No files were written.")
-        return
+    return class_names
 
-    # --- Step 3: split data
-    logger.info(f"Proceeding with dataset creation (Output Dir: {output_dir})...")
 
+def split_data(dataset_batches, all_annotations, test_dir_index, val_ratio):
+    """--- Step 3: Split Data ---"""
     train_files = []
     val_files = []
     test_files = []
 
     if test_dir_index is not None:
-        # --- NEUE LOGIK: Hold-Out-Datensatz als Test-Set ---
+        # Hold-Out-Dataset as Test-Set
         if not (0 < test_dir_index <= len(dataset_batches)):
             logger.error(f"Invalid --test-dir-index {test_dir_index}. Must be between 1 and {len(dataset_batches)}.")
-            return
+            return None, None, None
 
         logger.info(f"Using Dataset #{test_dir_index} ({dataset_batches[test_dir_index - 1]['name']}) as TEST set.")
         logger.info(
@@ -339,7 +341,7 @@ def main(stats_only=False, test_dir_index=None, val_ratio=0.2,
         test_batch = dataset_batches.pop(test_dir_index - 1)
         test_files = list(test_batch["annotations"].keys())
 
-        # Restliche Batches für Train/Val sammeln
+        # Collect remaining batches for Train/Val
         train_val_image_keys = []
         for batch in dataset_batches:
             train_val_image_keys.extend(list(batch["annotations"].keys()))
@@ -350,7 +352,7 @@ def main(stats_only=False, test_dir_index=None, val_ratio=0.2,
         train_files = train_val_image_keys[split_idx:]
 
     else:
-        # --- ALTE LOGIK: Alles mischen für Train/Val ---
+        # Mix all datasets for Train/Val
         logger.info(f"No --test-dir-index provided. Mixing all {len(dataset_batches)} datasets.")
         logger.info(f"Splitting all images into TRAIN/VAL with {val_ratio * 100}% validation ratio.")
 
@@ -360,12 +362,39 @@ def main(stats_only=False, test_dir_index=None, val_ratio=0.2,
         split_idx = int(len(all_image_keys) * val_ratio)
         val_files = all_image_keys[:split_idx]
         train_files = all_image_keys[split_idx:]
-        # test_files bleibt leer
+        # test_files remains empty
 
     logger.info(
         f"Splitting data: {len(train_files)} TRAIN images, {len(val_files)} VAL images, {len(test_files)} TEST images.")
+    return train_files, val_files, test_files
 
-    # --- Schritt 4: Bilder verarbeiten ---
+
+def main(stats_only, test_dir_index, val_ratio, raw_dir, output_dir):
+    """Main function to run the script."""
+
+    # --- Step 1: Load Data ---
+    dataset_batches, all_annotations = load_and_prepare_data(raw_dir)
+    if dataset_batches is None:
+        return
+
+    # --- Step 2: Print Statistics ---
+    class_names = print_dataset_statistics(dataset_batches)
+
+    # --- Step 3: Handle stats-only mode ---
+    if stats_only:
+        logger.info("Stats-only mode finished. No files were written.")
+        return
+
+    logger.info(f"Proceeding with dataset creation (Output Dir: {output_dir})...")
+
+    # --- Step 4: Split Data ---
+    train_files, val_files, test_files = split_data(
+        dataset_batches, all_annotations, test_dir_index, val_ratio
+    )
+    if train_files is None:
+        return  # Error already logged in split_data
+
+    # --- Step 5: Process Images ---
     class_to_id = {name: i for i, name in enumerate(class_names)}
 
     process_images(train_files, all_annotations, class_to_id, "train", output_dir)
@@ -373,7 +402,7 @@ def main(stats_only=False, test_dir_index=None, val_ratio=0.2,
     if test_files:
         process_images(test_files, all_annotations, class_to_id, "test", output_dir)
 
-    # --- Schritt 5: YAML-Datei erstellen ---
+    # --- Step 6: Create YAML file ---
     create_yaml_file(class_names, has_test_set=bool(test_files), output_dir=output_dir)
 
 
@@ -410,12 +439,12 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # Logik-Check: val_ratio muss zwischen 0 und 1 sein
+    # Logic-Check: val_ratio must be between 0 and 1
     if not (0.0 <= args.val_ratio <= 1.0):
         logger.error("--val-ratio must be between 0.0 and 1.0.")
     else:
         main(
-            stats_only=True,
+            stats_only=args.stats_only,
             test_dir_index=args.test_dir_index,
             val_ratio=args.val_ratio,
             raw_dir=args.raw_dir,
