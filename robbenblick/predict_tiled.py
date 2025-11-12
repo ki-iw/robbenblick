@@ -1,11 +1,9 @@
 import argparse
-import torch
 from pathlib import Path
 from tqdm import tqdm
-import yaml
 import pandas as pd
 
-from sahi.models.yolov8 import Yolov8DetectionModel
+from sahi.models.ultralytics import UltralyticsDetectionModel
 from sahi.predict import get_sliced_prediction
 
 from robbenblick import logger, CONFIG_PATH
@@ -13,13 +11,12 @@ from robbenblick.utils import get_device, load_config
 
 
 def run_inference_on_image(
-        detection_model: Yolov8DetectionModel,
+        detection_model: UltralyticsDetectionModel,
         image_path: Path,
         output_dir: Path,
         slice_size: int,
         overlap_ratio: float,
         save_visuals: bool,
-        save_yolo: bool,
 ):
     """
     Runs sliced inference on a single image and exports the results.
@@ -36,16 +33,6 @@ def run_inference_on_image(
         )
 
         output_stem = image_path.stem
-
-        # export results in YOLO format
-        if save_yolo:
-            yolo_out_path = output_dir / "labels" / f"{output_stem}.txt"
-            yolo_out_path.parent.mkdir(parents=True, exist_ok=True)
-            result.export_predictions(
-                export_format="yolo",
-                output_dir=str(yolo_out_path.parent),
-                file_name=output_stem,
-            )
 
         # export results as visualized image
         if save_visuals:
@@ -150,28 +137,39 @@ def main():
         logger.error(f"Source file or directory not found: {args.source}")
         return
 
-    if not args.save_visuals and not args.save_yolo:
+    if not args.save_visuals:
         logger.warning("No output format specified (use --save-visuals or --save-yolo). Only counts will be saved.")
 
     # load trained model
     device = get_device()
-    detection_model = Yolov8DetectionModel(
+    detection_model = UltralyticsDetectionModel(
         model_path=str(model_path),
         confidence_threshold=conf_thresh,
         device=device,
     )
 
     # find images
+    image_paths = []
     if args.source.is_dir():
-        image_paths = sorted(list(args.source.glob("*.jpg")) + \
-                             list(args.source.glob("*.png")) + \
-                             list(args.source.glob("*.jpeg")))
+        supported_extensions = {".jpg", ".jpeg", ".png", ".tiff", ".tif"}
+        logger.info(f"Scanning for images in {args.source}...")
+
+        for file_path in args.source.glob("*"):
+            if file_path.is_file() and file_path.suffix.lower() in supported_extensions:
+                image_paths.append(file_path)
+
+        image_paths.sort()
         logger.info(f"Found {len(image_paths)} images in {args.source}")
     elif args.source.is_file():
         image_paths = [args.source]
         logger.info(f"Processing single image: {args.source}")
     else:
         logger.error(f"Source is not a valid file or directory: {args.source}")
+        return
+
+    # Stellt sicher, dass wir Bilder gefunden haben, bevor wir weitermachen
+    if not image_paths:
+        logger.warning(f"No images with extensions .jpg/.jpeg/.png found at {args.source}. Aborting.")
         return
 
     # inference
@@ -186,7 +184,6 @@ def main():
             slice_size=slice_size,
             overlap_ratio=overlap_ratio,
             save_visuals=args.save_visuals,
-            save_yolo=args.save_yolo,
         )
         total_detections += num_dets
 
