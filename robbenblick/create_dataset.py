@@ -36,7 +36,8 @@ def parse_cvat_xml(xml_file):
 
         polygons = []
 
-        # Find both <polyline> and <polygon> tags, as CVAT can export both.
+        # Find both <polyline> and <polygon> tags.
+        # CVAT exports can contain both polyline and polygon tags depending on annotation tool used.
         annotation_tags = image_tag.findall("polyline")
         annotation_tags.extend(image_tag.findall("polygon"))
 
@@ -94,7 +95,7 @@ def convert_to_yolo_format(bbox, img_width, img_height):
     # Failsafe Check:
     # Ensure no NaN or inf values are returned
     # Also ensures values are within the valid [0.0, 1.0] range
-    if any(v is None or not (0.0 <= v <= 1.0) for v in result):
+    if any(v is None or v < 0.0 or v > 1.0 for v in result):
         logger.warning(f"Generated invalid YOLO coords (NaN/inf or out of bounds): {result}")
         return None
 

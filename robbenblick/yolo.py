@@ -131,7 +131,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--run_id",
         type=str,
-        default=None,  # Wird aus Config geladen
+        default=None,
         help="Override the run ID from the config file.",
     )
     parser.add_argument(
@@ -143,7 +143,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--freeze",
         type=int,
-        default=None,  # Wird aus Config geladen
+        default=None,
         help="Override the 'freeze' setting from the config file."
     )
     parser.add_argument(

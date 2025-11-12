@@ -139,7 +139,6 @@ def main():
                 run_id=run_id,
                 dataset_name=dataset_name,
                 confidence_thresh=confidence_thresh,
-                classes=0  # TODO: Dies evtl. auch dynamisch aus der Config laden
             )
 
     elif args.dataset == "groundtruth":
