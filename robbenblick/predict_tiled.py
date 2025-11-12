@@ -167,7 +167,7 @@ def main():
         logger.error(f"Source is not a valid file or directory: {args.source}")
         return
 
-    # Stellt sicher, dass wir Bilder gefunden haben, bevor wir weitermachen
+    # Ensure that we have found images before proceeding
     if not image_paths:
         logger.warning(f"No images with extensions .jpg/.jpeg/.png found at {args.source}. Aborting.")
         return

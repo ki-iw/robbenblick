@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 import argparse
 import collections
+import math
 
 import numpy as np
 import cv2
@@ -95,7 +96,7 @@ def convert_to_yolo_format(bbox, img_width, img_height):
     # Failsafe Check:
     # Ensure no NaN or inf values are returned
     # Also ensures values are within the valid [0.0, 1.0] range
-    if any(v is None or v < 0.0 or v > 1.0 for v in result):
+    if any(math.isnan(v) or math.isinf(v) or v < 0.0 or v > 1.0 for v in result):
         logger.warning(f"Generated invalid YOLO coords (NaN/inf or out of bounds): {result}")
         return None
 

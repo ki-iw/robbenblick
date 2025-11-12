@@ -187,7 +187,7 @@ if __name__ == "__main__":
 
     yolo_hyp_data = config_data.get('yolo_hyperparams')
     if yolo_hyp_data is None:
-        logger.error("Config Error: 'yolo_hyperparams' Sektion nicht in config file gefunden.")
+        logger.error("Config Error: 'yolo_hyperparams' section not found in config file.")
         exit(1)
 
     if args.mode == "train":

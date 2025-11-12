@@ -41,7 +41,7 @@ def convert_xml_tif_to_png(xml_path, xml_path_png):
 
 
 def load_config(config_path: Path) -> dict | None:
-    """Lädt eine YAML-Konfigurationsdatei sicher."""
+    """Safely loads a YAML configuration file."""
     if not config_path.exists():
         logger.error(f"Config file not found: {config_path}")
         return None

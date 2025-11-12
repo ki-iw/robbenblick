@@ -176,7 +176,7 @@ def run_experiment(base_config, variant, base_run_id):
                 # Clean column names (they often have whitespace)
                 df.columns = df.columns.str.strip()
 
-                # Find the best epoch based on mAP50-95
+                # Find the best epoch based on mAP50(B)
                 best_epoch_data = df.sort_values(by="metrics/mAP50(B)", ascending=False).iloc[0]
 
                 # Extract key metrics
