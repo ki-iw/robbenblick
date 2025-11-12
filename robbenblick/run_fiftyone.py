@@ -8,12 +8,14 @@ from robbenblick.utils import load_config
 
 
 def fo_yolo_groundtruth_dataset(dataset_dir: Path, split: str, dataset_name: str):
-    """ Loads a processed YOLO dataset (images + ground truth labels) into FiftyOne. """
+    """Loads a processed YOLO dataset (images + ground truth labels) into FiftyOne."""
     # data.yaml must be in the dataset_dir for this to work
     yaml_path_dataset = dataset_dir / "dataset.yaml"
 
     if not yaml_path_dataset.exists():
-        logger.error(f"No  dataset.yaml found in {dataset_dir}. Run create_dataset.py first.")
+        logger.error(
+            f"No dataset.yaml found in {dataset_dir}. Run create_dataset.py first."
+        )
         return None
 
     dataset = fo.Dataset.from_dir(
@@ -27,8 +29,10 @@ def fo_yolo_groundtruth_dataset(dataset_dir: Path, split: str, dataset_name: str
 
 
 def fo_yolo_predictions_dataset(
-        images_dir: str, run_id: str, dataset_name: str,
-        confidence_thresh: float,
+    images_dir: str,
+    run_id: str,
+    dataset_name: str,
+    confidence_thresh: float,
 ):
     """
     Loads YOLO test images, runs a trained model to get predictions,
@@ -65,7 +69,7 @@ def main():
         "--config",
         type=Path,
         default=CONFIG_PATH / "base_config.yaml",
-        help="Path to the central YAML config file."
+        help="Path to the central YAML config file.",
     )
     parser.add_argument(
         "--dataset",
@@ -98,13 +102,13 @@ def main():
         exit(1)
 
     # run_id (CLI overwrites config)
-    run_id = args.run_id if args.run_id is not None else config_data.get('run_id')
+    run_id = args.run_id if args.run_id is not None else config_data.get("run_id")
     if run_id is None:
         logger.error("No 'run_id' provided in CLI or config file.")
         exit(1)
 
     # dataset path
-    dataset_output_dir_str = config_data.get('dataset_output_dir')
+    dataset_output_dir_str = config_data.get("dataset_output_dir")
     if dataset_output_dir_str is None:
         logger.error("Config Error: 'dataset_output_dir' not defined in config file.")
         exit(1)
@@ -112,7 +116,7 @@ def main():
     yolo_dataset_dir = Path(dataset_output_dir_str)
 
     # confidence threshold (from config, with fallback)
-    confidence_thresh = config_data.get('confidence_thresh', 0.25)
+    confidence_thresh = config_data.get("confidence_thresh", 0.25)
 
     dataset = None
     if args.dataset == "predictions":
@@ -158,7 +162,7 @@ def main():
             dataset = fo_yolo_groundtruth_dataset(
                 dataset_dir=yolo_dataset_dir,
                 split=args.split,
-                dataset_name=dataset_name
+                dataset_name=dataset_name,
             )
 
     if dataset:

@@ -16,6 +16,7 @@ TRAIN_SCRIPT = "robbenblick/yolo.py"
 
 # --- Helper Functions ---
 
+
 def find_iterables(config_dict):
     """
     Recursively searches the config dictionary for lists,
@@ -82,7 +83,7 @@ def set_nested_key(d, key_path, value):
 
     Example: set_nested_key({}, 'b.c', 10) -> {'b': {'c': 10}}
     """
-    keys = key_path.split('.')
+    keys = key_path.split(".")
     current = d
     for key in keys[:-1]:
         current = current.setdefault(key, {})
@@ -101,7 +102,7 @@ def run_experiment(base_config, variant, base_run_id):
     variant_suffix = []
     for key, value in variant.items():
         # Replace '.' with '_' for cleaner names (e.g., 'yolo_hyp_batch')
-        clean_key = key.replace('.', '_')
+        clean_key = key.replace(".", "_")
         if clean_key.startswith("yolo_hyperparams_"):
             clean_key = clean_key.replace("yolo_hyperparams_", "")
         variant_suffix.append(f"{clean_key}_{value}")
@@ -116,7 +117,7 @@ def run_experiment(base_config, variant, base_run_id):
     logger.info(f"--- STARTING EXPERIMENT: {run_id} ---")
 
     # 3. Update the configuration with the variant's values
-    variant_config['run_id'] = run_id
+    variant_config["run_id"] = run_id
     for key, value in variant.items():
         set_nested_key(variant_config, key, value)
         logger.info(f"  Override: {key} = {value}")
@@ -131,7 +132,7 @@ def run_experiment(base_config, variant, base_run_id):
     # Define the path for the temp config *inside* the run directory
     temp_config_path = run_output_dir / f"config_for_run_{run_id}.yaml"
 
-    with open(temp_config_path, 'w') as f:
+    with open(temp_config_path, "w") as f:
         yaml.dump(variant_config, f, sort_keys=False)
 
     logger.info(f"Temporary config saved to: {temp_config_path}")
@@ -141,7 +142,7 @@ def run_experiment(base_config, variant, base_run_id):
         logger.info(f"Running yolo.py (train) for {run_id}...")
         # Set up the environment for the subprocess
         env = os.environ.copy()
-        env['PYTHONPATH'] = str(PROJECT_ROOT)
+        env["PYTHONPATH"] = str(PROJECT_ROOT)
 
         project_save_dir = run_output_dir.parent
 
@@ -151,15 +152,19 @@ def run_experiment(base_config, variant, base_run_id):
             [
                 "python",
                 TRAIN_SCRIPT,
-                "--config", str(temp_config_path),
-                "--mode", "train",
-                "--run_id", run_id,
-                "--project-dir", str(project_save_dir)
+                "--config",
+                str(temp_config_path),
+                "--mode",
+                "train",
+                "--run_id",
+                run_id,
+                "--project-dir",
+                str(project_save_dir),
             ],
             check=True,
             text=True,
             cwd=PROJECT_ROOT,
-            env=env
+            env=env,
         )
         logger.info(f"--- EXPERIMENT {run_id} COMPLETED SUCCESSFULLY ---")
 
@@ -169,7 +174,9 @@ def run_experiment(base_config, variant, base_run_id):
             results_path = PROJECT_ROOT / "runs" / "detect" / run_id / "results.csv"
 
             if not results_path.exists():
-                logger.warning(f"Evaluation skipped: results.csv not found at {results_path}")
+                logger.warning(
+                    f"Evaluation skipped: results.csv not found at {results_path}"
+                )
                 return None
             else:
                 df = pd.read_csv(results_path)
@@ -177,7 +184,9 @@ def run_experiment(base_config, variant, base_run_id):
                 df.columns = df.columns.str.strip()
 
                 # Find the best epoch based on mAP50(B)
-                best_epoch_data = df.sort_values(by="metrics/mAP50(B)", ascending=False).iloc[0]
+                best_epoch_data = df.sort_values(
+                    by="metrics/mAP50(B)", ascending=False
+                ).iloc[0]
 
                 # Extract key metrics
                 result_dict = {
@@ -186,7 +195,7 @@ def run_experiment(base_config, variant, base_run_id):
                     "mAP50": best_epoch_data["metrics/mAP50(B)"],
                     "mAP50-95": best_epoch_data["metrics/mAP50-95(B)"],
                     "precision": best_epoch_data["metrics/precision(B)"],
-                    "recall": best_epoch_data["metrics/recall(B)"]
+                    "recall": best_epoch_data["metrics/recall(B)"],
                 }
                 logger.info("--- BEST EPOCH PERFORMANCE ---")
                 logger.info(f"  Run Name: {run_id}")
@@ -207,28 +216,30 @@ def run_experiment(base_config, variant, base_run_id):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run YOLOv8 Hyperparameter Experiments.")
+    parser = argparse.ArgumentParser(
+        description="Run YOLOv8 Hyperparameter Experiments."
+    )
     parser.add_argument(
         "--config",
         type=Path,
         default=DEFAULT_CONFIG_PATH,
-        help=f"Path to the base YAML config file (default: {DEFAULT_CONFIG_PATH})"
+        help=f"Path to the base YAML config file (default: {DEFAULT_CONFIG_PATH})",
     )
     parser.add_argument(
         "--top-n",
         type=int,
         default=-1,
-        help="Display Top N runs. Use -1 to display all."
+        help="Display Top N runs. Use -1 to display all.",
     )
     args = parser.parse_args()
 
     logger.info("Starting hyperparameter experiment run...")
 
-    base_config =  load_config(args.config)
+    base_config = load_config(args.config)
     if base_config is None:
         exit(1)
 
-    base_run_id = base_config.get('run_id', 'experiment')
+    base_run_id = base_config.get("run_id", "experiment")
 
     # Find iterable parameters (also nested)
     iterables = find_iterables(base_config)
@@ -266,13 +277,23 @@ def main():
         final_df_sorted = final_df.sort_values(by="mAP50", ascending=False)
 
         # Show Top N runs
-        n_top_runs = min(args.top_n, len(final_df_sorted)) if args.top_n > 0 else len(final_df_sorted)
-        logger.info(f"Top {n_top_runs} runs sorted by mAP50(B):")
-        columns_to_show = ["run_name", "mAP50", "mAP50-95", "precision", "recall", "epoch"]
-        # use print instead of logger to format the table properly
-        print(
-            final_df_sorted[columns_to_show].head(n_top_runs).to_string(index=False)
+        n_top_runs = (
+            min(args.top_n, len(final_df_sorted))
+            if args.top_n > 0
+            else len(final_df_sorted)
         )
+        logger.info(f"Top {n_top_runs} runs sorted by mAP50(B):")
+        columns_to_show = [
+            "run_name",
+            "mAP50",
+            "mAP50-95",
+            "precision",
+            "recall",
+            "epoch",
+        ]
+        # use print instead of logger to format the table properly
+        print(final_df_sorted[columns_to_show].head(n_top_runs).to_string(index=False))
+
 
 if __name__ == "__main__":
     main()

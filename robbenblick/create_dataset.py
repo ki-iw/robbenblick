@@ -75,9 +75,10 @@ def convert_to_yolo_format(bbox, img_width, img_height):
 
     # Failsafe Check: Prevent division by zero if img_width or img_height is 0
     if img_width <= 0 or img_height <= 0:
-        logger.error(f"Invalid image dimensions encountered in conversion: w={img_width}, h={img_height}")
+        logger.error(
+            f"Invalid image dimensions encountered in conversion: w={img_width}, h={img_height}"
+        )
         return None
-
 
     dw = 1.0 / img_width
     dh = 1.0 / img_height
@@ -97,7 +98,9 @@ def convert_to_yolo_format(bbox, img_width, img_height):
     # Ensure no NaN or inf values are returned
     # Also ensures values are within the valid [0.0, 1.0] range
     if any(math.isnan(v) or math.isinf(v) or v < 0.0 or v > 1.0 for v in result):
-        logger.warning(f"Generated invalid YOLO coords (NaN/inf or out of bounds): {result}")
+        logger.warning(
+            f"Generated invalid YOLO coords (NaN/inf or out of bounds): {result}"
+        )
         return None
 
     return result
@@ -130,9 +133,9 @@ def find_labels_for_tile(img_annotations, tile_coords, tile_dims, class_to_id):
             # Skip invalid or tiny bboxes
             if (local_bbox[2] <= local_bbox[0]) or (local_bbox[3] <= local_bbox[1]):
                 continue
-            if (local_bbox[2] - local_bbox[0]) * (
-                    local_bbox[3] - local_bbox[1]
-            ) < (tile_h * tile_w * 0.0001):
+            if (local_bbox[2] - local_bbox[0]) * (local_bbox[3] - local_bbox[1]) < (
+                tile_h * tile_w * 0.0001
+            ):
                 continue
 
             # Convert to YOLO format
@@ -141,9 +144,7 @@ def find_labels_for_tile(img_annotations, tile_coords, tile_dims, class_to_id):
             # Failsafe Check: Only add the label if the conversion was successful and returned valid coordinates
             if yolo_bbox:
                 class_id = class_to_id[poly_info["label"]]
-                tile_labels.append(
-                    f"{class_id} {' '.join(map(str, yolo_bbox))}"
-                )
+                tile_labels.append(f"{class_id} {' '.join(map(str, yolo_bbox))}")
 
     return tile_labels
 
@@ -159,8 +160,16 @@ def save_tile(tile_img, tile_labels, base_filename, img_output_dir, label_output
         f.write("\n".join(tile_labels))
 
 
-def tile_one_image(unique_key, annotations, class_to_id, img_output_dir, label_output_dir,
-                   tile_size, tile_overlap, save_only_with_labels):
+def tile_one_image(
+    unique_key,
+    annotations,
+    class_to_id,
+    img_output_dir,
+    label_output_dir,
+    tile_size,
+    tile_overlap,
+    save_only_with_labels,
+):
     """Loads a single image, tiles it, and processes annotations for each tile."""
     img_annotations = annotations[unique_key]
     image_path = img_annotations["full_image_path"]
@@ -207,12 +216,24 @@ def tile_one_image(unique_key, annotations, class_to_id, img_output_dir, label_o
             if should_save:
                 base_filename = f"{Path(unique_key).stem}_tile_{y}_{x}"
                 save_tile(
-                    tile_img, tile_labels, base_filename, img_output_dir, label_output_dir
+                    tile_img,
+                    tile_labels,
+                    base_filename,
+                    img_output_dir,
+                    label_output_dir,
                 )
 
 
-def process_images(image_files, annotations, class_to_id, split, output_dir,
-                   tile_size, tile_overlap, save_only_with_labels):
+def process_images(
+    image_files,
+    annotations,
+    class_to_id,
+    split,
+    output_dir,
+    tile_size,
+    tile_overlap,
+    save_only_with_labels,
+):
     """Tiles images and converts annotations for a given split (train/val/test)."""
     logger.info(f"Processing {split} set ({len(image_files)} images)...")
 
@@ -224,8 +245,14 @@ def process_images(image_files, annotations, class_to_id, split, output_dir,
 
     for unique_key in tqdm(image_files, desc=f"Tiling {split} images"):
         tile_one_image(
-            unique_key, annotations, class_to_id, img_output_dir, label_output_dir,
-            tile_size, tile_overlap, save_only_with_labels
+            unique_key,
+            annotations,
+            class_to_id,
+            img_output_dir,
+            label_output_dir,
+            tile_size,
+            tile_overlap,
+            save_only_with_labels,
         )
 
 
@@ -277,17 +304,21 @@ def load_and_prepare_data(raw_dir):
             unique_key = f"{src_dir.name}_{image_name}"
             data["full_image_path"] = image_dir / image_name
             if unique_key in all_annotations:
-                logger.warning(f"Duplicate unique key '{unique_key}' found. Overwriting previous entry.")
+                logger.warning(
+                    f"Duplicate unique key '{unique_key}' found. Overwriting previous entry."
+                )
 
             processed_annotations[unique_key] = data
             all_annotations[unique_key] = data  # Global dict for process_images
 
-        dataset_batches.append({
-            "name": src_dir.name,
-            "task_name": task_name,
-            "annotations": processed_annotations,
-            "class_names": class_names_batch
-        })
+        dataset_batches.append(
+            {
+                "name": src_dir.name,
+                "task_name": task_name,
+                "annotations": processed_annotations,
+                "class_names": class_names_batch,
+            }
+        )
 
     return dataset_batches, all_annotations
 
@@ -350,7 +381,9 @@ def print_dataset_statistics(dataset_batches):
             logger.info(f"    Median (50%): {np.median(areas_np):.2f}")
             logger.info(f"    25% Quantile: {np.quantile(areas_np, 0.25):.2f}")
             logger.info(f"    75% Quantile: {np.quantile(areas_np, 0.75):.2f}")
-            logger.info(f"    Min / Max: {np.min(areas_np):.2f} / {np.max(areas_np):.2f}")
+            logger.info(
+                f"    Min / Max: {np.min(areas_np):.2f} / {np.max(areas_np):.2f}"
+            )
 
         logger.info("-" * 20)
 
@@ -369,18 +402,23 @@ def print_dataset_statistics(dataset_batches):
 
 
 def split_data(dataset_batches, all_annotations, test_dir_index, val_ratio):
-    """Split Data into Train/Val/Test """
+    """Split Data into Train/Val/Test"""
     test_files = []
 
     if test_dir_index is not None:
         # Hold-Out-Dataset as Test-Set
         if not (0 < test_dir_index <= len(dataset_batches)):
-            logger.error(f"Invalid --test-dir-index {test_dir_index}. Must be between 1 and {len(dataset_batches)}.")
+            logger.error(
+                f"Invalid --test-dir-index {test_dir_index}. Must be between 1 and {len(dataset_batches)}."
+            )
             return None, None, None
 
-        logger.info(f"Using Dataset #{test_dir_index} ({dataset_batches[test_dir_index - 1]['name']}) as TEST set.")
         logger.info(
-            f"Splitting remaining {len(dataset_batches) - 1} datasets into TRAIN/VAL with {val_ratio * 100}% validation ratio.")
+            f"Using Dataset #{test_dir_index} ({dataset_batches[test_dir_index - 1]['name']}) as TEST set."
+        )
+        logger.info(
+            f"Splitting remaining {len(dataset_batches) - 1} datasets into TRAIN/VAL with {val_ratio * 100}% validation ratio."
+        )
 
         test_batch = dataset_batches.pop(test_dir_index - 1)
         test_files = list(test_batch["annotations"].keys())
@@ -397,8 +435,12 @@ def split_data(dataset_batches, all_annotations, test_dir_index, val_ratio):
 
     else:
         # Mix all datasets for Train/Val
-        logger.info(f"No --test-dir-index provided. Mixing all {len(dataset_batches)} datasets.")
-        logger.info(f"Splitting all images into TRAIN/VAL with {val_ratio * 100}% validation ratio.")
+        logger.info(
+            f"No --test-dir-index provided. Mixing all {len(dataset_batches)} datasets."
+        )
+        logger.info(
+            f"Splitting all images into TRAIN/VAL with {val_ratio * 100}% validation ratio."
+        )
 
         all_image_keys = list(all_annotations.keys())
         random.shuffle(all_image_keys)
@@ -409,7 +451,8 @@ def split_data(dataset_batches, all_annotations, test_dir_index, val_ratio):
         # test_files remains empty
 
     logger.info(
-        f"Splitting data: {len(train_files)} TRAIN images, {len(val_files)} VAL images, {len(test_files)} TEST images.")
+        f"Splitting data: {len(train_files)} TRAIN images, {len(val_files)} VAL images, {len(test_files)} TEST images."
+    )
     return train_files, val_files, test_files
 
 
@@ -434,17 +477,17 @@ def print_split_statistics(train_files, val_files, test_files, all_annotations):
     logger.info("--- 📊 POST-SPLIT STATISTICS ---")
 
     total, with_ann, ratio = _analyze_split(train_files, all_annotations)
-    logger.info(f"  TRAIN Set:")
+    logger.info("  TRAIN Set:")
     logger.info(f"    Total Images: {total}")
     logger.info(f"    Images w/ Annotations: {with_ann} ({ratio:.2f}%)")
 
     val_total, val_with_ann, val_ratio = _analyze_split(val_files, all_annotations)
-    logger.info(f"  VAL Set:")
+    logger.info("  VAL Set:")
     logger.info(f"    Total Images: {val_total}")
     logger.info(f"    Images w/ Annotations: {val_with_ann} ({val_ratio:.2f}%)")
 
     total, with_ann, ratio = _analyze_split(test_files, all_annotations)
-    logger.info(f"  TEST Set:")
+    logger.info("  TEST Set:")
     logger.info(f"    Total Images: {total}")
     logger.info(f"    Images w/ Annotations: {with_ann} ({ratio:.2f}%)")
 
@@ -453,9 +496,13 @@ def print_split_statistics(train_files, val_files, test_files, all_annotations):
     # Check if the validation set is problematic
     if val_total > 0 and val_with_ann == 0:
         logger.warning("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        logger.warning("CRITICAL: Your validation set contains 0 images with annotations.")
+        logger.warning(
+            "CRITICAL: Your validation set contains 0 images with annotations."
+        )
         logger.warning("This WILL cause NaN errors during training.")
-        logger.warning("RECOMMENDATION: Use --test-dir-index to assign the empty dataset(s) to the 'test' split.")
+        logger.warning(
+            "RECOMMENDATION: Use --test-dir-index to assign the empty dataset(s) to the 'test' split."
+        )
         logger.warning("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 
 
@@ -466,36 +513,33 @@ def main():
         "--config",
         type=Path,
         default=DEFAULT_CONFIG_PATH,
-        help="Path to the central YAML config file."
+        help="Path to the central YAML config file.",
     )
 
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Run in statistics-only mode. No files will be written."
+        help="Run in statistics-only mode. No files will be written.",
     )
     parser.add_argument(
         "--test-dir-index",
         type=int,
-        help="Specify the 1-based index of the dataset (from --dry-run) to use as the TEST set. All other datasets will be split into train/val."
+        help="Specify the 1-based index of the dataset (from --dry-run) to use as the TEST set. All other datasets will be split into train/val.",
     )
     parser.add_argument(
         "--val-ratio",
         type=float,
         default=0.2,
-        help="The ratio of images to use for the VALIDATION set (default: 0.2)."
+        help="The ratio of images to use for the VALIDATION set (default: 0.2).",
     )
     parser.add_argument(
         "--raw-dir",
         type=Path,
         default=DEFAULT_RAW_DIR,
-        help=f"Base directory containing raw dataset subfolders (default: {DEFAULT_RAW_DIR})"
+        help=f"Base directory containing raw dataset subfolders (default: {DEFAULT_RAW_DIR})",
     )
 
     args = parser.parse_args()
-
-    if DEFAULT_CONFIG_PATH == args.config:
-        logger.warning(f"No --config provided, using default: {DEFAULT_CONFIG_PATH}")
 
     # Logic-Check: val_ratio must be between 0 and 1
     if not (0.0 <= args.val_ratio <= 1.0):
@@ -506,18 +550,17 @@ def main():
     if config is None:
         exit(1)
 
-    tile_size = config.get('imgsz')
-    tile_overlap = config.get('tile_overlap')
-    save_only_with_labels = config.get('save_only_with_labels')
+    tile_size = config.get("imgsz")
+    tile_overlap = config.get("tile_overlap")
+    save_only_with_labels = config.get("save_only_with_labels")
 
     if tile_size is None and tile_overlap is None and save_only_with_labels is None:
         logger.error(
-            "No tiling parameters found in config file. Please specify 'imgsz', 'tile_overlap', and 'save_only_with_labels'.")
+            "No tiling parameters found in config file. Please specify 'imgsz', 'tile_overlap', and 'save_only_with_labels'."
+        )
         return
 
-    logger.info(
-        f"Tile size: {tile_size}, Tile overlap: {tile_overlap}"
-    )
+    logger.info(f"Tile size: {tile_size}, Tile overlap: {tile_overlap}")
     logger.info(f"Save only tiles with labels: {save_only_with_labels}")
 
     # Load Data
@@ -543,7 +586,7 @@ def main():
         logger.info("Dry-run mode finished. No files were written.")
         return
 
-    config_output_dir_str = config.get('dataset_output_dir')
+    config_output_dir_str = config.get("dataset_output_dir")
     if config_output_dir_str:
         output_dir = Path(config_output_dir_str)
     else:
@@ -554,13 +597,37 @@ def main():
     # Process Images
     class_to_id = {name: i for i, name in enumerate(class_names)}
 
-    process_images(train_files, all_annotations, class_to_id, "train", output_dir,
-                   tile_size=tile_size, tile_overlap=tile_overlap, save_only_with_labels=save_only_with_labels)
-    process_images(val_files, all_annotations, class_to_id, "val", output_dir,
-                   tile_size=tile_size, tile_overlap=tile_overlap, save_only_with_labels=save_only_with_labels)
+    process_images(
+        train_files,
+        all_annotations,
+        class_to_id,
+        "train",
+        output_dir,
+        tile_size=tile_size,
+        tile_overlap=tile_overlap,
+        save_only_with_labels=save_only_with_labels,
+    )
+    process_images(
+        val_files,
+        all_annotations,
+        class_to_id,
+        "val",
+        output_dir,
+        tile_size=tile_size,
+        tile_overlap=tile_overlap,
+        save_only_with_labels=save_only_with_labels,
+    )
     if test_files:
-        process_images(test_files, all_annotations, class_to_id, "test", output_dir,
-                       tile_size=tile_size, tile_overlap=tile_overlap, save_only_with_labels=save_only_with_labels)
+        process_images(
+            test_files,
+            all_annotations,
+            class_to_id,
+            "test",
+            output_dir,
+            tile_size=tile_size,
+            tile_overlap=tile_overlap,
+            save_only_with_labels=save_only_with_labels,
+        )
 
     # Create YAML file
     create_yaml_file(class_names, has_test_set=bool(test_files), output_dir=output_dir)

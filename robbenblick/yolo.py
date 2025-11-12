@@ -11,7 +11,14 @@ from robbenblick.utils import load_config, get_device
 BASE_CONFIG_PATH = CONFIG_PATH / "base_config.yaml"
 
 
-def train(run_id, model_name, hyp_dict: dict, dataset_yaml_path, project_dir: Path = None, freeze_layers=None):
+def train(
+    run_id,
+    model_name,
+    hyp_dict: dict,
+    dataset_yaml_path,
+    project_dir: Path = None,
+    freeze_layers=None,
+):
     """
     Detects the best available device and trains a YOLOv8 model
     using hyperparameters from a config file.
@@ -37,7 +44,7 @@ def train(run_id, model_name, hyp_dict: dict, dataset_yaml_path, project_dir: Pa
             task="detect",
             freeze=freeze_layers,
             exist_ok=True,
-            **hyp_dict
+            **hyp_dict,
         )
 
         logger.info("Training complete! 🎉")
@@ -65,7 +72,9 @@ def validate_on_test_set(run_id, dataset_yaml_path):
         return result
     except Exception as e:
         logger.error(f"Error during validation on test split: {e}")
-        logger.warning("Ensure your dataset.yaml has a 'test:' entry pointing to 'images/test'.")
+        logger.warning(
+            "Ensure your dataset.yaml has a 'test:' entry pointing to 'images/test'."
+        )
         return None
 
 
@@ -92,7 +101,9 @@ def predict(model: YOLO, images_dir: str, run_id) -> None:
     if results:
         logger.info(f"✅ Predictions successfully saved to: {results[0].save_dir}")
     else:
-        logger.warning(f"Prediction ran, but no results were returned. Is {images_dir} empty?")
+        logger.warning(
+            f"Prediction ran, but no results were returned. Is {images_dir} empty?"
+        )
 
 
 def load_model(run_id: str):
@@ -120,7 +131,7 @@ if __name__ == "__main__":
         "--config",
         type=Path,
         default=CONFIG_PATH / "base_config.yaml",
-        help="Path to the central YAML config file."
+        help="Path to the central YAML config file.",
     )
     parser.add_argument(
         "--mode",
@@ -144,13 +155,13 @@ if __name__ == "__main__":
         "--freeze",
         type=int,
         default=None,
-        help="Override the 'freeze' setting from the config file."
+        help="Override the 'freeze' setting from the config file.",
     )
     parser.add_argument(
         "--project-dir",
         type=Path,
-        default='runs/detect',
-        help="Explicit project directory to save runs (e.g., 'runs/detect')."
+        default="runs/detect",
+        help="Explicit project directory to save runs (e.g., 'runs/detect').",
     )
 
     args = parser.parse_args()
@@ -159,24 +170,26 @@ if __name__ == "__main__":
     if config_data is None:
         exit(1)
 
-    run_id = args.run_id if args.run_id is not None else config_data.get('run_id')
+    run_id = args.run_id if args.run_id is not None else config_data.get("run_id")
     if run_id is None:
         logger.error("No 'run_id' provided in CLI or config file.")
         exit(1)
 
-    freeze_layers = args.freeze if args.freeze is not None else config_data.get('freeze')
+    freeze_layers = (
+        args.freeze if args.freeze is not None else config_data.get("freeze")
+    )
 
-    model_name = config_data.get('model')
+    model_name = config_data.get("model")
     if model_name is None:
         logger.error("No 'model' defined in config file.")
         exit(1)
 
-    dataset_output_dir_str = config_data.get('dataset_output_dir')
+    dataset_output_dir_str = config_data.get("dataset_output_dir")
     if dataset_output_dir_str is None:
         logger.error("Config Error: 'dataset_output_dir' not defined in config file.")
         exit(1)
 
-    dataset_yaml_path = Path(dataset_output_dir_str) / 'dataset.yaml'
+    dataset_yaml_path = Path(dataset_output_dir_str) / "dataset.yaml"
 
     if not dataset_yaml_path.exists():
         logger.error(f"'dataset.yaml' not found at expected path: {dataset_yaml_path}")
@@ -185,9 +198,11 @@ if __name__ == "__main__":
     else:
         logger.info(f"Using dataset configuration: {dataset_yaml_path}")
 
-    yolo_hyp_data = config_data.get('yolo_hyperparams')
+    yolo_hyp_data = config_data.get("yolo_hyperparams")
     if yolo_hyp_data is None:
-        logger.error("Config Error: 'yolo_hyperparams' section not found in config file.")
+        logger.error(
+            "Config Error: 'yolo_hyperparams' section not found in config file."
+        )
         exit(1)
 
     if args.mode == "train":
@@ -197,7 +212,7 @@ if __name__ == "__main__":
             hyp_dict=yolo_hyp_data,
             dataset_yaml_path=dataset_yaml_path,
             project_dir=args.project_dir,
-            freeze_layers=freeze_layers
+            freeze_layers=freeze_layers,
         )
 
     elif args.mode == "predict":
@@ -210,8 +225,9 @@ if __name__ == "__main__":
             predict(model, str(images_path), run_id=run_id)
 
     elif args.mode == "validate":
-
-        results = validate_on_test_set(run_id=run_id, dataset_yaml_path=dataset_yaml_path)
+        results = validate_on_test_set(
+            run_id=run_id, dataset_yaml_path=dataset_yaml_path
+        )
         if results:
             logger.info("Validation results on TEST split:")
             logger.info(f"  mAP50-95: {results.box.map:.4f}")

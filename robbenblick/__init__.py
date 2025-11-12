@@ -2,9 +2,7 @@ from importlib import metadata
 from importlib.metadata import version
 from pathlib import Path
 
-import yaml
 from dotenv import load_dotenv
-from dotmap import DotMap
 from loguru import logger  # noqa: F401
 
 load_dotenv()

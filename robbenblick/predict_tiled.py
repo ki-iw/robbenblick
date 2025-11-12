@@ -11,12 +11,12 @@ from robbenblick.utils import get_device, load_config
 
 
 def run_inference_on_image(
-        detection_model: UltralyticsDetectionModel,
-        image_path: Path,
-        output_dir: Path,
-        slice_size: int,
-        overlap_ratio: float,
-        save_visuals: bool,
+    detection_model: UltralyticsDetectionModel,
+    image_path: Path,
+    output_dir: Path,
+    slice_size: int,
+    overlap_ratio: float,
+    save_visuals: bool,
 ):
     """
     Runs sliced inference on a single image and exports the results.
@@ -60,47 +60,47 @@ def main():
         "--config",
         type=Path,
         default=CONFIG_PATH / "base_config.yaml",
-        help="Path to the base YAML config file."
+        help="Path to the base YAML config file.",
     )
     parser.add_argument(
         "--run_id",
         type=str,
         default=None,
-        help="Override the 'run_id' from the config file to select a specific model."
+        help="Override the 'run_id' from the config file to select a specific model.",
     )
     parser.add_argument(
         "--source",
         type=Path,
         required=True,
-        help="Path to a single image or a directory of images."
+        help="Path to a single image or a directory of images.",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
         required=True,
-        help="Directory to save the results (visuals, labels, and counts.csv)."
+        help="Directory to save the results (visuals, labels, and counts.csv).",
     )
     parser.add_argument(
         "--overlap-ratio",
         type=float,
         default=None,
-        help="Overlap ratio (overrides 'tile_overlap' from config)."
+        help="Overlap ratio (overrides 'tile_overlap' from config).",
     )
     parser.add_argument(
         "--conf",
         type=float,
         default=None,
-        help="Confidence threshold (overrides 'confidence_thresh' from config)."
+        help="Confidence threshold (overrides 'confidence_thresh' from config).",
     )
     parser.add_argument(
         "--save-visuals",
         action="store_true",
-        help="Save the original images with predictions drawn on them."
+        help="Save the original images with predictions drawn on them.",
     )
     parser.add_argument(
         "--save-yolo",
         action="store_true",
-        help="Save the predictions in YOLO .txt format."
+        help="Save the predictions in YOLO .txt format.",
     )
 
     args = parser.parse_args()
@@ -109,7 +109,7 @@ def main():
     if config_data is None:
         exit(1)
 
-    run_id = args.run_id if args.run_id is not None else config_data.get('run_id')
+    run_id = args.run_id if args.run_id is not None else config_data.get("run_id")
     if not run_id:
         logger.error("No 'run_id' provided in CLI or config file.")
         return
@@ -117,16 +117,26 @@ def main():
     logger.info(f"Using model from run: {run_id}")
 
     try:
-        slice_size = config_data['yolo_hyperparams']['imgsz']
+        slice_size = config_data["yolo_hyperparams"]["imgsz"]
         logger.info(f"Using slice_size (from 'imgsz'): {slice_size}")
     except KeyError:
-        logger.error("'yolo_hyperparams.imgsz' not found in config. Cannot set --slice-size.")
+        logger.error(
+            "'yolo_hyperparams.imgsz' not found in config. Cannot set --slice-size."
+        )
         return
 
-    overlap_ratio = args.overlap_ratio if args.overlap_ratio is not None else config_data.get('tile_overlap', 0.2)
+    overlap_ratio = (
+        args.overlap_ratio
+        if args.overlap_ratio is not None
+        else config_data.get("tile_overlap", 0.2)
+    )
     logger.info(f"Using overlap_ratio: {overlap_ratio}")
 
-    conf_thresh = args.conf if args.conf is not None else config_data.get('confidence_thresh', 0.25)
+    conf_thresh = (
+        args.conf
+        if args.conf is not None
+        else config_data.get("confidence_thresh", 0.25)
+    )
     logger.info(f"Using confidence_threshold: {conf_thresh}")
 
     if not model_path.exists():
@@ -138,7 +148,9 @@ def main():
         return
 
     if not args.save_visuals:
-        logger.warning("No output format specified (use --save-visuals or --save-yolo). Only counts will be saved.")
+        logger.warning(
+            "No output format specified (use --save-visuals or --save-yolo). Only counts will be saved."
+        )
 
     # load trained model
     device = get_device()
@@ -169,7 +181,9 @@ def main():
 
     # Ensure that we have found images before proceeding
     if not image_paths:
-        logger.warning(f"No images with extensions .jpg/.jpeg/.png found at {args.source}. Aborting.")
+        logger.warning(
+            f"No images with extensions .jpg/.jpeg/.png found at {args.source}. Aborting."
+        )
         return
 
     # inference
