@@ -1,0 +1,57 @@
+# configs/base_config.yaml
+# This is the SINGLE source of truth for data creation, training, and inference.
+
+
+# These parameters are read directly by the Python scripts.
+
+run_id: 'iter_run'
+model: ['yolov8n.pt', 'yolov8s.pt', 'yolov8m.pt']
+freeze: [None, 10]           # Number of layers to freeze (None, 8, 10...)
+imgsz: &imgsz 640
+
+# Data Creation Parameters (for create_dataset.py) ---
+dataset_output_dir: 'data/processed/dataset_yolo'
+tile_overlap: 0.2
+save_only_with_labels: false
+
+# Inference Parameters (for predict_tiled.py) ---
+confidence_thresh: 0.25
+
+yolo_hyperparams:
+  # YOLO Hyperparameters (for yolo.py, loaded via 'cfg') ---
+  # All parameters from here on are read by model.train(cfg=...).
+
+  # Core Training
+  epochs: 100
+  batch: 24
+  imgsz: *imgsz
+  patience: 50
+  verbose: False
+  optimizer: auto # AdamW / SGD / auto
+  # learning rates are ignored, if optimizer=auto
+  # lr0: 0.01
+  # lrf: 0.01
+  val: True
+  amp: True
+  augment: True
+
+  # Augmentation (Adjusted for aerial images)
+  degrees: 90.0      # Rotation
+  translate: 0.1
+  scale: [0.1, 0.3]  # Scale/Zoom
+  shear: 0.0
+  perspective: 0.0   # Perspective
+  flipud: 0.5        # Flip Up/Down
+  fliplr: 0.5
+  hsv_h: 0.015       # Hue
+  hsv_s: 0.7         # Saturation
+  hsv_v: 0.4         # Value/Brightness
+
+  # Other Augmentations
+  mosaic: 1.0        # Mosaic
+  mixup: 0.0
+  copy_paste: 0.0
+
+  # Loss & Metrics (Optimized for Counting/Recall)
+  iou: 0.2           # Training IoU threshold
+  box: 2.5           # Box loss weight

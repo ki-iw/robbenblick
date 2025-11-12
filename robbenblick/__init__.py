@@ -18,16 +18,12 @@ finally:
     del metadata  # optional, avoids polluting the results of dir(__package__)
 
 
-DATA_PATH = Path(__file__).resolve().parent.parent / "data"
-CONFIG_PATH = Path(__file__).resolve().parent.parent / "configs"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DATA_PATH = PROJECT_ROOT / "data"
+CONFIG_PATH = PROJECT_ROOT / "configs"
 
 logger.info(f"Data path set to: {DATA_PATH}")
 logger.info(f"Config path set to: {CONFIG_PATH}")
 
 
-dataset_config = DotMap(
-    yaml.safe_load((CONFIG_PATH / "create_dataset.yaml").read_text())
-)
-model_config = DotMap(yaml.safe_load((CONFIG_PATH / "model.yaml").read_text()))
-
-__all__ = ["DATA_PATH", "dataset_config", "model_config"]
+__all__ = ["DATA_PATH", "CONFIG_PATH", "PROJECT_ROOT"]

@@ -1,98 +1,201 @@
 # robbenblick
-A Computer Vision project for object detection and annotation management using YOLOv8 and FiftyOne.
+A Computer Vision project for object detection and annotation management using YOLOv8, SAHI, and FiftyOne.
 
 ## Overview
-This repository provides a pipeline for:
-- Preparing and tiling annotated image datasets (from CVAT)
-- Training and evaluating YOLOv8 models (Ultralytics)
-- Visualizing datasets and predictions with FiftyOne
+This repository provides a complete MLOps pipeline for:
+* **Data Preparation:** Converting raw CVAT annotations (XML) and large images into a tiled, YOLO-compatible dataset.
+* **Automated Experiments:** Systematically training and tuning YOLOv8 models using `run_experiments.py`.
+* **Tiled Inference:** Running optimized inference (SAHI) on large, high-resolution images for object counting.
+* **Visualization:** Analyzing datasets and model predictions interactively with FiftyOne.
 
-## Main Scripts & Functionality
+## Project Workflow
 
-### `create_dataset.py`
-- **Purpose:** Converts raw CVAT-annotated images and XML files into a YOLO-compatible dataset, including tiling and label conversion.
-- **How it works:**
-  - Loads configuration from `configs/create_dataset.yaml` using DotMap for easy access.
-  - Parses CVAT XML annotations, extracts polygons, and tiles images into smaller crops.
-  - Converts polygon annotations to YOLO bounding box format for each tile.
-  - Splits data into train/test sets and writes images/labels to `data/processed/dataset_yolo`.
-  - Generates a `data.yaml` file for YOLO training.
-- **Run:**
-  ```
-  python -m robbenblick.create_dataset
-  ```
+The project is designed to follow a clear, sequential workflow:
 
-### `yolo.py`
-- **Purpose:** Trains and evaluates YOLOv8 models using the processed dataset.
-- **How it works:**
-  - Loads model and training parameters from `configs/model.yaml` via DotMap.
-  - Detects available hardware (CUDA, MPS, or CPU) and logs device info.
-  - Trains YOLOv8 using Ultralytics with the specified config and dataset.
-  - Supports multiple modes (e.g., `train`, `predict`) via argparse arguments.
-  - Saves predictions to `run/detect/<run_id>_predict` when in predict mode.
-- **Run:**
-  ```
-  python -m robbenblick.yolo --mode train --run_id <name-of-run>
-  python -m robbenblick.yolo --mode predict --run_id <name-of-run>
-  ```
-
-### `run_fiftyone.py`
-- **Purpose:** Visualizes datasets and predictions using FiftyOne.
-- **How it works:**
-  - Loads either YOLO or CVAT datasets for visualization.
-  - Handles conversion of `.tif` images to `.png` for browser compatibility.
-  - Creates a fiftyone dataset with either:
-        - CVAT images and the CVAT annotation
-        - A new set of images, runs inference with the selected model and displays the result
-  - Launches the FiftyOne app .
-- **Run:**
-  ```
-  python -m robbenblick.run_fiftyone --dataset cvat --recreate
-  python -m robbenblick.run_fiftyone --run_id <name-of-run> --dataset yolo --recreate
-  ```
+1.  **Prepare Data (`create_dataset.py`):**
+    Place raw images and CVAT `annotations.xml` files into `data/raw/`. Run the script to generate a tiled, YOLO-formatted dataset in `data/processed/`.
+2.  **Tune Model (`run_experiments.py`):**
+    Define a set of hyperparameters (e.g., models, freeze layers, augmentation) in `configs/base_iter_config.yaml`. Run the script to train a model for every combination and find the best performer.
+3.  **Validate Model (`yolo.py`):**
+    Take the `run_id` of your best experiment and run validation on the hold-out `test` set.
+4.  **Infer & Count (`predict_tiled.py`):**
+    Use the best `run_id` to run sliced inference on new, large images. This script generates final counts and visual outputs.
+5.  **Visualize (`run_fiftyone.py`):**
+    Visually inspect your ground truth dataset or your model's predictions at any stage.
 
 ## Configuration
-- All major parameters (tiling, training, model, etc.) are set in YAML files under `configs/`.
-- These are loaded as DotMap objects for dot-access in code.
+This project uses two separate configuration files, managed by `robbenblick.utils.load_config`.
+
+* **`configs/base_config.yaml`**
+    * **Purpose:** The single source of truth for **single runs**.
+    * **Used By:** `create_dataset.py`, `predict_tiled.py`, `run_fiftyone.py`, and `yolo.py` (for validation/single-predict).
+    * **Content:** Defines static parameters like data paths (`dataset_output_dir`), model (`model`), and inference settings (`confidence_thresh`).
+
+* **`configs/base_iter_config.yaml`**
+    * **Purpose:** The configuration file for **experiments and tuning**.
+    * **Used By:** `run_experiments.py`.
+    * **Content:** Any parameter defined as a **YAML list** (e.g., `model: [yolov8n.pt, yolov8s.pt]`) will be iterated over. `run_experiments.py` will test every possible combination of all lists.
 
 ## Environment Setup
-```sh
-conda env create --file environment.yml
-conda activate RobbenBlick
-```
 
-## Pre-commit Hooks
-To run code style and quality checks:
-```sh
-pre-commit run
-```
+1.  Clone the repository:
+    ```sh
+    git clone git@github.com:ki-iw/robbenblick.git
+    cd robbenblick
+    ```
 
-## CVAT Annotation Workflow
-1. Log into CVAT and go to "jobs", export ```CVAT for images``` and toggle on "save images".
-2. Place images in `data/raw/images` and XML in `data/raw/annotations.xml`.
-3. Run `create_dataset.py` to prepare the dataset for YOLO training.
+2.  Create the Conda environment:
+    ```sh
+    conda env create --file environment.yml
+    conda activate RobbenBlick
+    ```
 
-## FiftyOne Visualization
-- Place images and annotations in `data/raw/images` and `data/raw/annotations.xml`.
-- Run:
-  ```
-  python -m robbenblick.run_fiftyone --dataset cvat --recreate
-  ```
-- If `.tif` images, they will be converted and saved as "png", this takes a few moment.
+3.  (Optional) Install pre-commit hooks:
+    ```sh
+    pre-commit install
+    ```
 
+## Core Scripts & Usage
 
-## Known Issues
+### `create_dataset.py`
+* **Purpose:** Converts raw CVAT-annotated images and XML files into a YOLO-compatible dataset, including tiling and label conversion.
+* **How it works:**
+    * Loads configuration from a config file.
+    * Scans `data/raw/` for dataset subfolders.
+    * Parses CVAT XML annotations and extracts polygons.
+    * Tiles large images into smaller crops based on `imgsz` and `tile_overlap` from the config.
+    * Converts polygon annotations to YOLO bounding box format for each tile.
+    * Splits data into `train`, `val`, and `test` sets and writes them to `data/processed/dataset_yolo`.
+* **Run:**
+    ```sh
+    # Do a 'dry run' to see statistics without writing files
+    python -m robbenblick.create_dataset --dry-run --config configs/base_config.yaml
+
+    # Create the dataset, holding out dataset #4 as the test set
+    python -m robbenblick.create_dataset --config configs/base_config.yaml --test-dir-index 4
+    ```
+* **Key Arguments:**
+    * `--config`: Path to the `base_config.yaml` file.
+    * `--dry-run`: Run in statistics-only mode.
+    * `--test-dir-index`: 1-based index of the dataset subfolder to use as a hold-out test set.
+    * `--val-ratio`: Ratio of the remaining data to use for validation.
+
+### `run_experiments.py`
+* **Purpose:** **This is the main training script.** It automates hyperparameter tuning by iterating over parameters defined in `base_iter_config.yaml`.
+* **How it works:**
+    * Finds all parameters in the config file that are lists (e.g., `freeze: [None, 10]`).
+    * Generates a "variant" for every possible combination of these parameters.
+    * For each variant, it calls `yolo.py --mode train` as a subprocess with a unique `run_id`.
+    * After all runs are complete, it reads the `results.csv` from each run directory, sorts them by `mAP50`, and prints a final ranking table.
+* **Run:**
+    ```sh
+    # Start the experiment run defined in the iteration config
+    python -m robbenblick.run_experiments --config configs/base_iter_config.yaml
+
+    # Run experiments and only show the top 5 results
+    python -m robbenblick.run_experiments --config configs/base_iter_config.yaml --top-n 5
+    ```
+
+### `predict_tiled.py`
+* **Purpose:** **This is the main inference script.** It runs a trained YOLOv8 model on new, full-sized images using Sliced Aided Hyper Inference (SAHI).
+* **How it works:**
+    * Loads a trained `best.pt` model specified by the `--run_id` argument.
+    * Loads inference parameters (like `confidence_thresh`, `tile_overlap`) from the `base_config.yaml`.
+    * Uses `get_sliced_prediction` from SAHI to perform tiled inference on each image.
+    * Saves outputs, including visualized images (if `--save-visuals`), YOLO `.txt` labels (if `--save-yolo`), and a `detection_counts.csv` file.
+* **Run:**
+    ```sh
+    # Run inference on a folder of new images and save the visual results
+    python -m robbenblick.predict_tiled \
+        --config configs/base_config.yaml \
+        --run_id "best_run_from_experiments" \
+        --source "data/new_images_to_count/" \
+        --output-dir "data/inference_results/" \
+        --save-visuals
+    ```
+
+### `yolo.py`
+* **Purpose:** The core engine for training, validation, and standard prediction. This script is called by `run_experiments.py` for training. You can use it directly for validation.
+* **How it works:**
+    * `--mode train`: Loads a base model (`yolov8s.pt`) and trains it on the dataset specified in the config.
+    * `--mode validate`: Loads a *trained* model (`best.pt` from a run directory) and validates it against the `test` split defined in `dataset.yaml`.
+    * `--mode predict`: Runs standard (non-tiled) YOLO prediction on a folder.
+* **Run:**
+    ```sh
+    # Validate the 'test' set performance of a completed run
+    python -m robbenblick.yolo \
+        --config configs/base_config.yaml \
+        --mode validate \
+        --run_id "best_run_from_experiments"
+    ```
+
+### `run_fiftyone.py`
+* **Purpose:** Visualizes datasets and predictions using FiftyOne.
+* **How it works:**
+    * `--dataset groundtruth`: Loads the processed YOLO dataset (images and ground truth labels) from `data/processed/`.
+    * `--dataset predictions`: Loads images, runs a specified model (`--run_id`) on them, and displays the model's predictions.
+* **Run:**
+    ```sh
+    # View the ground truth annotations for the 'val' split
+    python -m robbenblick.run_fiftyone \
+        --config configs/base_config.yaml \
+        --dataset groundtruth \
+        --split val \
+        --recreate
+
+    # View the predictions from 'my_best_run' on the 'test' split
+    python -m robbenblick.run_fiftyone \
+        --config configs/base_config.yaml \
+        --dataset predictions \
+        --split test \
+        --run_id "my_best_run" \
+        --recreate
+    ```
+
+##  Recommended Full Workflow
+
+1.  **Add Raw Data:**
+    * Place your first set of images and annotations in `data/raw/dataset_01/images/` and `data/raw/dataset_01/annotations.xml`.
+    * Place your second set (e.g., from a different location) in `data/raw/dataset_02/images/` and `data/raw/dataset_02/annotations.xml`.
+
+2.  **Create Dataset:**
+    * Run `python -m robbenblick.create_dataset --dry-run` to see your dataset statistics. Note the indices of your datasets.
+    * Let's say `dataset_02` is a good hold-out set. Run:
+        `python -m robbenblick.create_dataset --config configs/base_config.yaml --test-dir-index 2`
+
+3.  **Find Best Model:**
+    * Edit `configs/base_iter_config.yaml`. Define your experiments.
+        ```yaml
+        # Example: Test two models and two freeze strategies
+        model: ['yolov8s.pt', 'yolov8m.pt']
+        freeze: [None, 10]
+        yolo_hyperparams:
+          scale: [0.3, 0.5]
+        ```
+    * Run the experiments: `python -m robbenblick.run_experiments`.
+    * Note the `run_id` of the top-ranked model, e.g., `iter_run_model_yolov8m.pt_freeze_10_scale_0.3`.
+
+4.  **Validate on Test Set:**
+    * Check your best model's performance on the unseen test data:
+        `python -m robbenblick.yolo --mode validate --run_id "iter_run_model_yolov8m.pt_freeze_10_scale_0.3" --config configs/base_config.yaml`
+
+5.  **Apply Model for Counting:**
+    * Get a new folder of large, un-annotated images (e.g., `data/to_be_counted/`).
+    * Run `predict_tiled.py`:
+        `python -m robbenblick.predict_tiled --run_id "iter_run_model_yolov8m.pt_freeze_10_scale_0.3" --source "data/to_be_counted/" --output-dir "data/final_counts/" --save-visuals --save-yolo`
+    * Check the results in `data/final_counts/detection_counts.csv`.
+
+## Troubleshooting
+
 ### FiftyOne: failed to bind port
 If you get:
 ```
 fiftyone.core.service.ServiceListenTimeout: fiftyone.core.service.DatabaseService failed to bind to port
 ```
-Try:
-```
+
+Try killing any lingering `fiftyone` or `mongod` processes:
+```sh
 pkill -f fiftyone
 pkill -f mongod
-```
 Then rerun your script.
-
----
-For more details, see the code comments and configuration files in `configs/`.
+```
