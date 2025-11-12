@@ -475,7 +475,6 @@ def main():
     parser.add_argument(
         "--test-dir-index",
         type=int,
-        default=4,
         help="Specify the 1-based index of the dataset (from --dry-run) to use as the TEST set. All other datasets will be split into train/val."
     )
     parser.add_argument(
