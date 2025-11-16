@@ -300,19 +300,19 @@ def load_and_prepare_data(raw_dir):
 
         annotations_batch, class_names_batch, task_name = parse_cvat_xml(xml_file)
 
-        # Generiere die Ground Truth CSV-Datei für diesen Ordner
+        # Generate ground truth CSV-file
         ground_truth_counts = []
         for image_name, data in annotations_batch.items():
-            # Zähle die Anzahl der Polygone (Objekte) für dieses Bild
+            # Count number of polygons (objects) in this image
             count = len(data.get("polygons", []))
             ground_truth_counts.append({"image_name": image_name, "count": count})
 
         if ground_truth_counts:
-            # Sortiere nach Name für konsistente Ausgabe
+            # Sort by image name for consistency
             ground_truth_counts.sort(key=lambda x: x["image_name"])
             try:
                 df = pd.DataFrame(ground_truth_counts)
-                # Speichere die CSV im Rohdaten-Ordner
+                # Store CSV in the source directory
                 csv_path = src_dir / "ground_truth_counts.csv"
                 df.to_csv(csv_path, index=False)
                 logger.info(
