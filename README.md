@@ -1,6 +1,6 @@
 # robbenblick
-A Computer Vision project for object detection and annotation management using YOLOv8, SAHI, and FiftyOne.
-The aim is count objects in large images taken from aerial imagery.
+A Computer Vision project for object detection and annotation management using YOLOv8, SAHI, and FiftyOne, 
+with the primary aim of counting objects (Robben) in large aerial images.
 
 ## Overview
 This repository provides a complete MLOps pipeline for:
