@@ -58,7 +58,7 @@ def main():
 
     parser.add_argument(
         "--config",
-        type=Path,
+        type=str,
         default=CONFIG_PATH / "base_config.yaml",
         help="Path to the base YAML config file.",
     )
@@ -70,13 +70,13 @@ def main():
     )
     parser.add_argument(
         "--source",
-        type=Path,
+        type=str,
         required=True,
         help="Path to a single image or a directory of images.",
     )
     parser.add_argument(
         "--output-dir",
-        type=Path,
+        type=str,
         required=True,
         help="Directory to save the results (visuals, labels, and counts.csv).",
     )
@@ -97,15 +97,14 @@ def main():
         action="store_true",
         help="Save the original images with predictions drawn on them.",
     )
-    parser.add_argument(
-        "--save-yolo",
-        action="store_true",
-        help="Save the predictions in YOLO .txt format.",
-    )
 
     args = parser.parse_args()
 
-    config_data = load_config(args.config)
+    config_path = Path(args.config)
+    source_path = Path(args.source)
+    output_dir_path = Path(args.output_dir)
+
+    config_data = load_config(config_path)
     if config_data is None:
         exit(1)
 
@@ -143,14 +142,9 @@ def main():
         logger.error(f"Model file not found: {model_path}")
         return
 
-    if not args.source.exists():
-        logger.error(f"Source file or directory not found: {args.source}")
+    if not source_path.exists():
+        logger.error(f"Source file or directory not found: {source_path}")
         return
-
-    if not args.save_visuals:
-        logger.warning(
-            "No output format specified (use --save-visuals or --save-yolo). Only counts will be saved."
-        )
 
     # load trained model
     device = get_device()
@@ -162,27 +156,27 @@ def main():
 
     # find images
     image_paths = []
-    if args.source.is_dir():
+    if source_path.is_dir():
         supported_extensions = {".jpg", ".jpeg", ".png", ".tiff", ".tif"}
-        logger.info(f"Scanning for images in {args.source}...")
+        logger.info(f"Scanning for images in {source_path}...")
 
-        for file_path in args.source.glob("*"):
+        for file_path in source_path.glob("*"):
             if file_path.is_file() and file_path.suffix.lower() in supported_extensions:
                 image_paths.append(file_path)
 
         image_paths.sort()
-        logger.info(f"Found {len(image_paths)} images in {args.source}")
-    elif args.source.is_file():
-        image_paths = [args.source]
-        logger.info(f"Processing single image: {args.source}")
+        logger.info(f"Found {len(image_paths)} images in {source_path}")
+    elif source_path.is_file():
+        image_paths = [source_path]
+        logger.info(f"Processing single image: {source_path}")
     else:
-        logger.error(f"Source is not a valid file or directory: {args.source}")
+        logger.error(f"Source is not a valid file or directory: {source_path}")
         return
 
     # Ensure that we have found images before proceeding
     if not image_paths:
         logger.warning(
-            f"No images with extensions .jpg/.jpeg/.png found at {args.source}. Aborting."
+            f"No images with extensions .jpg/.jpeg/.png found at {source_path}. Aborting."
         )
         return
 
@@ -194,7 +188,7 @@ def main():
         num_dets = run_inference_on_image(
             detection_model=detection_model,
             image_path=img_path,
-            output_dir=args.output_dir,
+            output_dir=output_dir_path,
             slice_size=slice_size,
             overlap_ratio=overlap_ratio,
             save_visuals=args.save_visuals,
@@ -208,7 +202,7 @@ def main():
     logger.info(f"Total detections found: {total_detections}")
 
     if detection_counts:
-        csv_path = args.output_dir / "detection_counts.csv"
+        csv_path = output_dir_path / "detection_counts.csv"
         try:
             df = pd.DataFrame(detection_counts)
             df.to_csv(csv_path, index=False)
@@ -218,7 +212,7 @@ def main():
     else:
         logger.warning("No images were processed or no detections were found.")
 
-    logger.info(f"All results saved to: {args.output_dir}")
+    logger.info(f"All results saved to: {output_dir_path}")
 
 
 if __name__ == "__main__":

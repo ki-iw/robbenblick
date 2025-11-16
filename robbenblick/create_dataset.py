@@ -9,6 +9,7 @@ import numpy as np
 import cv2
 import yaml
 from tqdm import tqdm
+import pandas as pd
 
 from robbenblick import DATA_PATH, CONFIG_PATH, logger
 from robbenblick.utils import load_config
@@ -298,6 +299,31 @@ def load_and_prepare_data(raw_dir):
             continue
 
         annotations_batch, class_names_batch, task_name = parse_cvat_xml(xml_file)
+
+        # Generiere die Ground Truth CSV-Datei für diesen Ordner
+        ground_truth_counts = []
+        for image_name, data in annotations_batch.items():
+            # Zähle die Anzahl der Polygone (Objekte) für dieses Bild
+            count = len(data.get("polygons", []))
+            ground_truth_counts.append({"image_name": image_name, "count": count})
+
+        if ground_truth_counts:
+            # Sortiere nach Name für konsistente Ausgabe
+            ground_truth_counts.sort(key=lambda x: x["image_name"])
+            try:
+                df = pd.DataFrame(ground_truth_counts)
+                # Speichere die CSV im Rohdaten-Ordner
+                csv_path = src_dir / "ground_truth_counts.csv"
+                df.to_csv(csv_path, index=False)
+                logger.info(
+                    f"Saved ground truth counts for {src_dir.name} to {csv_path}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to save ground truth counts CSV for {src_dir.name}: {e}"
+                )
+        else:
+            logger.warning(f"No ground truth counts to save for {src_dir.name}.")
 
         processed_annotations = {}
         for image_name, data in annotations_batch.items():
