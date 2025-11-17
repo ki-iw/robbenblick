@@ -9,45 +9,50 @@ from robbenblick.utils import load_config
 
 def fo_yolo_groundtruth_dataset(dataset_dir: Path, split: str, dataset_name: str):
     """Loads a processed YOLO dataset (images + ground truth labels) into FiftyOne."""
-    # data.yaml must be in the dataset_dir for this to work
     yaml_path_dataset = dataset_dir / "dataset.yaml"
-
     if not yaml_path_dataset.exists():
         logger.error(
             f"No dataset.yaml found in {dataset_dir}. Run create_dataset.py first."
         )
         return None
 
-    dataset = fo.Dataset.from_dir(
-        dataset_type=fo.types.YOLOv5Dataset,
-        dataset_dir=dataset_dir,
-        split=split,
-        name=dataset_name,
-        label_field="ground_truth",  # Field for the loaded labels
-    )
-    return dataset
+    try:
+        dataset = fo.Dataset.from_dir(
+            dataset_type=fo.types.YOLOv5Dataset,
+            dataset_dir=dataset_dir,
+            split=split,
+            name=dataset_name,
+            label_field="ground_truth",  # Field for the loaded labels
+        )
+        return dataset
+    except Exception as e:
+        logger.error(f"Failed to load YOLO dataset from {dataset_dir}: {e}")
+        return None
 
 
-def fo_yolo_predictions_dataset(
-    images_dir: str,
-    run_id: str,
-    dataset_name: str,
-    confidence_thresh: float,
-):
-    """
-    Loads YOLO test images, runs a trained model to get predictions,
-    and visualizes them in FiftyOne.
-    """
+def fo_load_images_only(images_dir: str, dataset_name: str):
+    """Loads only the images from a directory into FiftyOne."""
+    if not Path(images_dir).exists():
+        logger.error(f"Image directory not found: {images_dir}")
+        logger.error("Did you run 'create_dataset.py'?")
+        return None
+
     dataset = fo.Dataset.from_dir(
         dataset_type=fo.types.ImageDirectory,
         dataset_dir=images_dir,
         name=dataset_name,
     )
+    return dataset
 
+
+def add_predictions_to_dataset(
+    dataset: fo.Dataset, run_id: str, confidence_thresh: float
+):
+    """Applies a YOLO model to an existing FiftyOne dataset."""
     model_path = f"runs/detect/{run_id}/weights/best.pt"
     if not Path(model_path).exists():
         logger.error(f"Model file not found at {model_path}. Cannot run predictions.")
-        return dataset  # Return dataset with images only
+        return  # Return without adding predictions
 
     logger.info(f"Loading model {model_path} with conf_thresh={confidence_thresh}")
     model = YOLO(model_path)
@@ -56,8 +61,7 @@ def fo_yolo_predictions_dataset(
         label_field="predictions",
         confidence_thresh=confidence_thresh,
     )
-
-    return dataset
+    logger.info("Predictions added successfully.")
 
 
 def main():
@@ -73,10 +77,10 @@ def main():
     )
     parser.add_argument(
         "--dataset",
-        choices=["groundtruth", "predictions"],
-        default="groundtruth",
+        choices=["groundtruth", "predictions", "all"],
+        default="all",
         required=False,
-        help="Visualize 'groundtruth' data or model 'predictions'.",
+        help="Visualize 'groundtruth', model 'predictions', or 'all' (both).",
     )
     parser.add_argument(
         "--split",
@@ -97,81 +101,74 @@ def main():
     )
     args = parser.parse_args()
 
+    # Load Config and Paths
     config_data = load_config(args.config)
     if config_data is None:
         exit(1)
 
-    # run_id (CLI overwrites config)
     run_id = args.run_id if args.run_id is not None else config_data.get("run_id")
-    if run_id is None:
-        logger.error("No 'run_id' provided in CLI or config file.")
+    if args.dataset != "groundtruth" and run_id is None:
+        logger.error(f"No 'run_id' provided. Required for mode '{args.dataset}'.")
         exit(1)
 
-    # dataset path
     dataset_output_dir_str = config_data.get("dataset_output_dir")
     if dataset_output_dir_str is None:
         logger.error("Config Error: 'dataset_output_dir' not defined in config file.")
         exit(1)
 
     yolo_dataset_dir = Path(dataset_output_dir_str)
-
-    # confidence threshold (from config, with fallback)
+    images_dir = str(yolo_dataset_dir / "images" / args.split)
     confidence_thresh = config_data.get("confidence_thresh", 0.25)
 
-    dataset = None
-    if args.dataset == "predictions":
-        # Visualize Model PREDICTIONS on a split
-        dataset_name = f"{run_id}_{args.split}_predictions"
-        if args.recreate and dataset_name in fo.list_datasets():
-            logger.info(f"Deleting dataset '{dataset_name}' to recreate it.")
-            fo.delete_dataset(dataset_name)
-
-        image_dir = str(yolo_dataset_dir / "images" / args.split)
-
-        if not Path(image_dir).exists():
-            logger.error(f"Image directory not found: {image_dir}")
-            logger.error("Did you run 'create_dataset.py'?")
-            exit()
-
-        if dataset_name in fo.list_datasets():
-            logger.info(f"Loading existing dataset '{dataset_name}'.")
-            dataset = fo.load_dataset(dataset_name)
-        else:
-            logger.info(f"Creating new dataset '{dataset_name}' for predictions.")
-            dataset = fo_yolo_predictions_dataset(
-                images_dir=image_dir,
-                run_id=run_id,
-                dataset_name=dataset_name,
-                confidence_thresh=confidence_thresh,
-            )
-
-    elif args.dataset == "groundtruth":
-        # Visualize GROUND TRUTH of the processed dataset
+    # Determine Dataset Name and Handle Deletion
+    if args.dataset == "groundtruth":
         dataset_name = f"yolo_groundtruth_{args.split}"
-        if args.recreate and dataset_name in fo.list_datasets():
-            logger.info(f"Deleting dataset '{dataset_name}' to recreate it.")
-            fo.delete_dataset(dataset_name)
+    elif args.dataset == "predictions":
+        dataset_name = f"{run_id}_{args.split}_predictions"
+    else:  # args.dataset == "all"
+        dataset_name = f"{run_id}_{args.split}_evaluation"
 
-        if dataset_name in fo.list_datasets():
-            logger.info(f"Loading existing dataset '{dataset_name}'.")
-            dataset = fo.load_dataset(dataset_name)
+    if args.recreate and dataset_name in fo.list_datasets():
+        logger.info(f"Deleting dataset '{dataset_name}' to recreate it.")
+        fo.delete_dataset(dataset_name)
+
+    # Load or Create Base Dataset
+    dataset = None
+    if dataset_name in fo.list_datasets():
+        logger.info(f"Loading existing dataset '{dataset_name}'.")
+        dataset = fo.load_dataset(dataset_name)
+    else:
+        logger.info(f"Creating new dataset '{dataset_name}'.")
+        if args.dataset == "predictions":
+            # Load images only
+            dataset = fo_load_images_only(images_dir, dataset_name)
         else:
-            logger.info(
-                f"Dataset '{dataset_name}' not found. Creating new dataset from {yolo_dataset_dir}."
-            )
+            # Load images + ground truth (for "groundtruth" and "all")
             dataset = fo_yolo_groundtruth_dataset(
                 dataset_dir=yolo_dataset_dir,
                 split=args.split,
                 dataset_name=dataset_name,
             )
 
-    if dataset:
-        dataset.persistent = True
-        session = fo.launch_app(dataset, port=5157, auto=False)
-        logger.info(f"FiftyOne app launched. View at: {session.url}")
-        session.wait()
-    else:
-        logger.error("Failed to load or create dataset.")
+    if dataset is None:
+        logger.error("Failed to load or create base dataset. Exiting.")
+        exit(1)
+
+    # Add Predictions (if required)
+    needs_predictions = args.dataset in ["predictions", "all"]
+    has_predictions = "predictions" in dataset.get_field_schema()
+
+    if needs_predictions and not has_predictions:
+        logger.info("Adding predictions to dataset...")
+        add_predictions_to_dataset(dataset, run_id, confidence_thresh)
+    elif needs_predictions and has_predictions:
+        logger.info("Dataset already contains predictions, skipping model run.")
+
+    # Launch App
+    dataset.persistent = True
+    session = fo.launch_app(dataset, port=5157, auto=False)
+    logger.info(f"FiftyOne app launched. View at: {session.url}")
+    session.wait()
 
 
 if __name__ == "__main__":
