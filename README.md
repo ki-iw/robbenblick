@@ -1,5 +1,5 @@
 # robbenblick
-A Computer Vision project for object detection and annotation management using YOLOv8, SAHI, and FiftyOne, 
+A Computer Vision project for object detection and annotation management using YOLOv8, SAHI, and FiftyOne,
 with the primary aim of counting objects (Robben) in large aerial images.
 
 ## Overview
@@ -213,6 +213,12 @@ This project uses two separate configuration files, managed by `robbenblick.util
     * This gives you the final MAE, RMSE, and R² metrics for your **counting task**.
 
 ## Troubleshooting
+
+### FiftyOne: images (partially) not visible
+Try using `--recreate` flag to force FiftyOne to reload the dataset:
+```sh
+python robbenblick/run_fiftyone.py --dataset groundtruth --split val --recreate
+```
 
 ### FiftyOne: failed to bind port
 If you get:
