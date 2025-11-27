@@ -3,52 +3,9 @@ from pathlib import Path
 from tqdm import tqdm
 import pandas as pd
 
-from sahi.models.ultralytics import UltralyticsDetectionModel
-from sahi.predict import get_sliced_prediction
-
 from robbenblick import logger, CONFIG_PATH
-from robbenblick.utils import get_device, load_config
-
-
-def run_inference_on_image(
-    detection_model: UltralyticsDetectionModel,
-    image_path: Path,
-    output_dir: Path,
-    slice_size: int,
-    overlap_ratio: float,
-    save_visuals: bool,
-):
-    """
-    Runs sliced inference on a single image and exports the results.
-    """
-    try:
-        # Run sliced inference
-        result = get_sliced_prediction(
-            image=str(image_path),
-            detection_model=detection_model,
-            slice_height=slice_size,
-            slice_width=slice_size,
-            overlap_height_ratio=overlap_ratio,
-            overlap_width_ratio=overlap_ratio,
-        )
-
-        output_stem = image_path.stem
-
-        # export results as visualized image
-        if save_visuals:
-            visual_out_path = output_dir / "visuals"
-            visual_out_path.mkdir(parents=True, exist_ok=True)
-            result.export_visuals(
-                export_dir=str(visual_out_path),
-                file_name=output_stem,
-            )
-
-        # returns count of detected objects
-        return len(result.object_prediction_list)
-
-    except Exception as e:
-        logger.error(f"Error processing {image_path.name}: {e}")
-        return 0
+from robbenblick.utils import load_config
+from robbenblick.inference import load_detection_model, run_inference
 
 
 def main():
@@ -146,13 +103,14 @@ def main():
         logger.error(f"Source file or directory not found: {source_path}")
         return
 
-    # load trained model
-    device = get_device()
-    detection_model = UltralyticsDetectionModel(
-        model_path=str(model_path),
-        confidence_threshold=conf_thresh,
-        device=device,
+    logger.info("Loading model...")
+    detection_model = load_detection_model(
+        model_path=model_path, conf_thresh=conf_thresh
     )
+    if detection_model is None:
+        logger.error("Failed to load model. Exiting.")
+        return
+    logger.info("Model loaded.")
 
     # find images
     image_paths = []
@@ -173,7 +131,6 @@ def main():
         logger.error(f"Source is not a valid file or directory: {source_path}")
         return
 
-    # Ensure that we have found images before proceeding
     if not image_paths:
         logger.warning(
             f"No images with extensions .jpg/.jpeg/.png found at {source_path}. Aborting."
@@ -185,14 +142,18 @@ def main():
     detection_counts = []
 
     for img_path in tqdm(image_paths, desc="Running inference"):
-        num_dets = run_inference_on_image(
+        result_data = run_inference(
             detection_model=detection_model,
             image_path=img_path,
             output_dir=output_dir_path,
             slice_size=slice_size,
             overlap_ratio=overlap_ratio,
             save_visuals=args.save_visuals,
+            hide_labels=False,
+            hide_conf=False,
         )
+
+        num_dets = result_data["count"]
         total_detections += num_dets
 
         logger.info(f"    -> {img_path.name}: {num_dets} objects found.")

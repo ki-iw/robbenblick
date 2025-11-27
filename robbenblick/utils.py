@@ -61,7 +61,7 @@ def get_device() -> str:
     if torch.cuda.is_available():
         device = "cuda"
         logger.info("Found NVIDIA CUDA GPU. Using GPU.")
-    elif torch.backends.mps.is_available():
+    elif torch.backends.mps.is_built():
         device = "mps"
         logger.info("Found Apple Silicon GPU. Using MPS.")
     else:
