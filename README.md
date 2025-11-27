@@ -62,6 +62,7 @@ This project uses two separate configuration files, managed by `robbenblick.util
 ## Core Scripts & Usage
 
 ### `create_dataset.py`
+* **Assumption:** You have multiple datasets in `data/raw/`, each with images and a CVAT `annotations.xml` using the format "CVAT for images 1.1".
 * **Purpose:** Converts raw CVAT-annotated images and XML files into a YOLO-compatible dataset, including tiling and label conversion.
 * **How it works:**
     * Loads configuration from a config file.
@@ -211,6 +212,25 @@ This project uses two separate configuration files, managed by `robbenblick.util
     * Now, compare the predicted counts (Step 5) with the ground truth counts (Step 2). Let's assume your "to_be_counted" folder *was* your `dataset_02`.
         `python -m robbenblick.evaluate_counts --gt-csv "data/raw/dataset_02/ground_truth_counts.csv" --pred-csv "data/final_counts/detection_counts.csv"`
     * This gives you the final MAE, RMSE, and R² metrics for your **counting task**.
+
+## Web App
+Build Docker:
+```bash
+docker build -t robbenblick-app:latest .
+```
+
+**With GPU support (if available):**
+
+```bash
+docker run -d --rm --gpus all -p 8501:8501 robbenblick-app:latest
+```
+
+**CPU only (should always work):**
+```bash
+docker run -d --rm -p 8501:8501 robbenblick-app:latest
+```
+
+Die Anwendung ist dann über `http://localhost:8501` erreichbar.
 
 ## Troubleshooting
 
