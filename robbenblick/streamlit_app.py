@@ -1,5 +1,4 @@
 import streamlit as st
-from streamlit.errors import StreamlitAPIException
 import pandas as pd
 from PIL import Image
 from pathlib import Path
@@ -11,8 +10,9 @@ from sahi.models.ultralytics import UltralyticsDetectionModel
 from robbenblick.utils import load_config
 from robbenblick.inference import load_detection_model, run_inference
 
-
-st.set_page_config(layout="wide", page_title="Seal Detection")
+st.set_page_config(
+    layout="wide", page_title="Seal Detection", initial_sidebar_state="collapsed"
+)
 st.title("🦭 Seal Detection")
 
 
@@ -21,10 +21,31 @@ def cached_load_model(
     model_path: Path, conf_thresh: float
 ) -> UltralyticsDetectionModel | None:
     """
-    Wrapper, um die externe Ladefunktion in Streamlit zu cachen.
+    Wrapper to cache the external loading function in Streamlit.
     """
-    # Ruft die ausgelagerte Funktion auf
+    # Calls the external function
     return load_detection_model(model_path=model_path, conf_thresh=conf_thresh)
+
+
+@st.cache_data(show_spinner=False, max_entries=3)
+def get_plotly_figure(image_path: Path, do_downsample: bool):
+    """
+    Loads the image and creates the Plotly figure.
+    Uses LRU caching: Only the last 3 viewed images are kept in RAM.
+    """
+    img = Image.open(image_path)
+
+    if do_downsample:
+        # Max 2000px edge length, maintains aspect ratio
+        img.thumbnail((2000, 2000))
+
+    fig = px.imshow(img)
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0),
+        height=600,
+        dragmode=False,  # "pan"
+    )
+    return fig
 
 
 # --- App Initialization ---
@@ -79,6 +100,13 @@ st.sidebar.markdown(f"**Confidence Threshold:** `{CONF_THRESH}`")
 st.sidebar.markdown(f"**Tile Size (imgsz):** `{SLICE_SIZE}x{SLICE_SIZE}`")
 st.sidebar.markdown(f"**Tile Overlap:** `{OVERLAP_RATIO}`")
 
+st.sidebar.subheader("Visualization Settings")
+USE_DOWNSAMPLING = st.sidebar.checkbox(
+    "Downsample Images for Display",
+    value=False,
+    help="Reduces image resolution for display to prevent browser crashes.",
+)
+
 # --- Main Interface ---
 
 # 1. Image Upload
@@ -90,14 +118,12 @@ uploaded_files = st.file_uploader(
 )
 
 saved_images = []
-if uploaded_files:
-    st.info(f"Saving {len(uploaded_files)} images temporarily...")
-    for f in uploaded_files:
-        save_path = UPLOAD_DIR / f.name
-        with open(save_path, "wb") as out_f:
-            out_f.write(f.read())
-        saved_images.append(save_path)
-    st.success(f"{len(saved_images)} images ready for inference.")
+for f in uploaded_files:
+    save_path = UPLOAD_DIR / f.name
+    with open(save_path, "wb") as out_f:
+        out_f.write(f.read())
+    saved_images.append(save_path)
+st.success(f"{len(saved_images)} images ready for inference.")
 
 # 2. Start Inference
 st.header("2. Start Inference")
@@ -177,21 +203,11 @@ if st.session_state.inference_done:
         )
 
         st.subheader("Detection Overview")
-        col1, col2 = st.columns([1, 2])
 
-        with col1:
-            st.dataframe(df_counts)
-            total_seals = df_counts["Detected Seal Count"].sum()
-            st.metric("Total Seals", total_seals)
-
-        with col2:
-            st.markdown("Count per Image:")
-            chart_data = df_counts.rename(columns={"Detected Seal Count": "Count"})
-            st.bar_chart(chart_data.set_index("Image"))
+        st.dataframe(df_counts)
 
         csv_path = OUTPUT_DIR / "detection_counts.csv"
         df_counts.to_csv(csv_path, index=False)
-        st.info(f"Count results saved to: {csv_path}")
 
         st.subheader("Visualized Results")
 
@@ -199,41 +215,32 @@ if st.session_state.inference_done:
             st.info("No images available for visualization.")
             st.stop()
 
-        tab_names = [r["image_name"] for r in results]
+        image_names = [r["image_name"] for r in results]
+        selected_img_name = st.selectbox(
+            "Select an image for detailed view:", image_names
+        )
 
-        if not all(tab_names):
-            st.error("Error: Some images have no names.")
-            st.stop()
+        # Filter for the matching result
+        selected_result = next(
+            (r for r in results if r["image_name"] == selected_img_name), None
+        )
 
-        try:
-            tabs = st.tabs(tab_names)
-        except StreamlitAPIException as e:
-            st.error(f"Could not create result tabs: {e}")
-            st.info("This can happen if image names contain duplicates or are invalid.")
-            st.stop()
+        if selected_result:
+            try:
+                visual_path = selected_result["visual_path"]
+                count = selected_result["count"]
 
-        for i, tab in enumerate(tabs):
-            with tab:
-                result_data = results[i]
-                try:
-                    visual_img = Image.open(result_data["visual_path"])
-                    st.markdown(f"**{result_data['count']}** seals detected.")
-                    # Lade Bild mit PIL
-                    img = Image.open(result_data["visual_path"])
+                st.markdown(f"**{count}** seals detected in `{selected_img_name}`.")
 
-                    # Erstelle interaktives Plotly-Diagramm
-                    fig = px.imshow(img)
-
-                    # Konfiguriere Layout: Entferne Ränder, setze Modus auf "Pan" (Verschieben)
-                    fig.update_layout(
-                        margin=dict(l=0, r=0, t=0, b=0), height=600, dragmode="pan"
-                    )
-
-                    # Zeige das Diagramm an
+                with st.spinner("Loading visualization..."):
+                    # Use cached function to speed up switching between images
+                    fig = get_plotly_figure(visual_path, USE_DOWNSAMPLING)
                     st.plotly_chart(fig, width="stretch")
-                except FileNotFoundError as e:
-                    st.error(f"Image file not found: {e}")
-                except Exception as e:
-                    st.error(f"Could not load image: {e}")
+
+            except FileNotFoundError as e:
+                st.error(f"Image file not found: {e}")
+            except Exception as e:
+                st.error(f"Could not load image: {e}")
+
 else:
     st.info("Upload images and start inference to see results.")
