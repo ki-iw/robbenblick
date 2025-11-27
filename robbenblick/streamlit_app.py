@@ -211,10 +211,6 @@ if st.session_state.inference_done:
 
         st.subheader("Visualized Results")
 
-        if not results:
-            st.info("No images available for visualization.")
-            st.stop()
-
         image_names = [r["image_name"] for r in results]
         selected_img_name = st.selectbox(
             "Select an image for detailed view:", image_names
