@@ -1,0 +1,12 @@
+[server]
+maxUploadSize = 500
+runOnSave = true
+
+[client]
+showSidebarNavigation = false
+
+[layout]
+wideMode = true
+
+[ui]
+hideTopBar = false
