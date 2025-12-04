@@ -202,6 +202,9 @@ if st.session_state.inference_done:
             ]
         )
 
+        df_counts.sort_values(by="Image", inplace=True)
+        df_counts.reset_index(drop=True, inplace=True)
+
         st.subheader("Detection Overview")
 
         st.dataframe(df_counts)

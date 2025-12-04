@@ -1,9 +1,16 @@
+import sys
 from importlib import metadata
 from importlib.metadata import version
 from pathlib import Path
 
 from dotenv import load_dotenv
 from loguru import logger  # noqa: F401
+
+logger.remove()
+logger.add(
+    sys.stderr,
+    format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <level>{message}</level>",
+)
 
 load_dotenv()
 
