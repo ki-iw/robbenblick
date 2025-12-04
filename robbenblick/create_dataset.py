@@ -1,4 +1,3 @@
-import random
 import xml.etree.ElementTree as ET
 from pathlib import Path
 import argparse
@@ -152,7 +151,7 @@ def find_labels_for_tile(img_annotations, tile_coords, tile_dims, class_to_id):
 
 def save_tile(tile_img, tile_labels, base_filename, img_output_dir, label_output_dir):
     """Saves a single tile image and its corresponding label file."""
-    img_save_path = img_output_dir / f"{base_filename}.jpg"
+    img_save_path = img_output_dir / f"{base_filename}.png"
     label_save_path = label_output_dir / f"{base_filename}.txt"
 
     cv2.imwrite(str(img_save_path), tile_img)
@@ -413,7 +412,7 @@ def print_dataset_statistics(dataset_batches):
 
         logger.info("-" * 20)
 
-    logger.info("--- 📊 OVERALL DATASET STATISTICS ---")
+    logger.info("--- OVERALL DATASET STATISTICS ---")
     logger.info(f"Total directories processed: {len(dataset_batches)}")
     logger.info(f"Total unique images: {total_image_count}")
     logger.info(f"Total annotations (all images): {total_annotations_count}")
@@ -427,113 +426,209 @@ def print_dataset_statistics(dataset_batches):
     return class_names
 
 
-def split_data(dataset_batches, all_annotations, test_dir_index, val_ratio):
-    """Split Data into Train/Val/Test"""
+def split_data(dataset_batches, train_indices, val_indices, test_indices):
+    """
+    Splits data strictly by dataset indices provided by the user.
+    Ensures zero leakage between datasets (e.g. for counting tasks).
+
+    Args:
+        dataset_batches: List of dataset dictionaries.
+        train_indices: List of 1-based indices for the training set.
+        val_indices: List of 1-based indices for the validation set.
+        test_indices: List of 1-based indices for the test set.
+    """
+    train_files = []
+    val_files = []
     test_files = []
 
-    if test_dir_index is not None:
-        # Hold-Out-Dataset as Test-Set
-        if not (0 < test_dir_index <= len(dataset_batches)):
-            logger.error(
-                f"Invalid --test-dir-index {test_dir_index}. Must be between 1 and {len(dataset_batches)}."
+    # Validate indices boundaries
+    total_batches = len(dataset_batches)
+    # Filter out None values if indices weren't provided
+    train_indices = train_indices or []
+    val_indices = val_indices or []
+    test_indices = test_indices or []
+
+    all_input_indices = train_indices + val_indices + test_indices
+
+    if not all_input_indices:
+        logger.error("No indices provided for splitting.")
+        return None, None, None
+
+    if max(all_input_indices) > total_batches or min(all_input_indices) < 1:
+        logger.error(f"Indices must be between 1 and {total_batches}.")
+        return None, None, None
+
+    # Check for overlaps (crucial for strict separation)
+    train_set, val_set, test_set = (
+        set(train_indices),
+        set(val_indices),
+        set(test_indices),
+    )
+    if (
+        not train_set.isdisjoint(val_set)
+        or not train_set.isdisjoint(test_set)
+        or not val_set.isdisjoint(test_set)
+    ):
+        logger.error(
+            "Overlap detected between Train/Val/Test indices! A dataset cannot belong to multiple splits."
+        )
+        return None, None, None
+
+    logger.info(f"Splitting {total_batches} datasets strictly by folder...")
+
+    # Iterate through batches and assign based on index
+    for i, batch in enumerate(dataset_batches):
+        current_idx = i + 1  # Use 1-based index for user friendliness
+        keys = list(batch["annotations"].keys())
+        batch_name = batch["name"]
+
+        if current_idx in train_indices:
+            train_files.extend(keys)
+            logger.info(f"  [TRAIN] Dataset #{current_idx} ({batch_name})")
+        elif current_idx in val_indices:
+            val_files.extend(keys)
+            logger.info(f"  [VAL]   Dataset #{current_idx} ({batch_name})")
+        elif current_idx in test_indices:
+            test_files.extend(keys)
+            logger.info(f"  [TEST]  Dataset #{current_idx} ({batch_name})")
+        else:
+            logger.warning(
+                f"  [UNUSED] Dataset #{current_idx} ({batch_name}) is not assigned to any split."
             )
-            return None, None, None
-
-        logger.info(
-            f"Using Dataset #{test_dir_index} ({dataset_batches[test_dir_index - 1]['name']}) as TEST set."
-        )
-        logger.info(
-            f"Splitting remaining {len(dataset_batches) - 1} datasets into TRAIN/VAL with {val_ratio * 100}% validation ratio."
-        )
-
-        test_batch = dataset_batches.pop(test_dir_index - 1)
-        test_files = list(test_batch["annotations"].keys())
-
-        # Collect remaining batches for Train/Val
-        train_val_image_keys = []
-        for batch in dataset_batches:
-            train_val_image_keys.extend(list(batch["annotations"].keys()))
-
-        random.shuffle(train_val_image_keys)
-        split_idx = int(len(train_val_image_keys) * val_ratio)
-        val_files = train_val_image_keys[:split_idx]
-        train_files = train_val_image_keys[split_idx:]
-
-    else:
-        # Mix all datasets for Train/Val
-        logger.info(
-            f"No --test-dir-index provided. Mixing all {len(dataset_batches)} datasets."
-        )
-        logger.info(
-            f"Splitting all images into TRAIN/VAL with {val_ratio * 100}% validation ratio."
-        )
-
-        all_image_keys = list(all_annotations.keys())
-        random.shuffle(all_image_keys)
-
-        split_idx = int(len(all_image_keys) * val_ratio)
-        val_files = all_image_keys[:split_idx]
-        train_files = all_image_keys[split_idx:]
-        # test_files remains empty
 
     logger.info(
-        f"Splitting data: {len(train_files)} TRAIN images, {len(val_files)} VAL images, {len(test_files)} TEST images."
+        f"Split complete: {len(train_files)} TRAIN, {len(val_files)} VAL, {len(test_files)} TEST images."
     )
     return train_files, val_files, test_files
 
 
-def _analyze_split(file_keys, all_annotations):
-    """Helper function to analyze a list of image keys."""
-    total_files = len(file_keys)
-    if total_files == 0:
-        return 0, 0, 0.0
-
-    with_annotations = 0
+def _get_split_counts(file_keys, all_annotations):
+    """
+    Helper to count images and total polygons (seals) in a list of keys.
+    """
+    num_imgs = len(file_keys)
+    num_anns = 0
     for key in file_keys:
-        # Check if the annotation entry for this key has any polygons
-        if all_annotations.get(key) and all_annotations[key]["polygons"]:
-            with_annotations += 1
-
-    ratio = (with_annotations / total_files) * 100 if total_files > 0 else 0
-    return total_files, with_annotations, ratio
+        data = all_annotations.get(key)
+        if data:
+            num_anns += len(data.get("polygons", []))
+    return num_imgs, num_anns
 
 
 def print_split_statistics(train_files, val_files, test_files, all_annotations):
-    logger.info("=" * 30)
-    logger.info("--- 📊 POST-SPLIT STATISTICS ---")
+    logger.info("=" * 50)
+    logger.info("--- FINAL SPLIT STATISTICS ---")
 
-    total, with_ann, ratio = _analyze_split(train_files, all_annotations)
-    logger.info("  TRAIN Set:")
-    logger.info(f"    Total Images: {total}")
-    logger.info(f"    Images w/ Annotations: {with_ann} ({ratio:.2f}%)")
+    # 1. Calculate raw counts
+    n_train_img, n_train_ann = _get_split_counts(train_files, all_annotations)
+    n_val_img, n_val_ann = _get_split_counts(val_files, all_annotations)
+    n_test_img, n_test_ann = _get_split_counts(test_files, all_annotations)
 
-    val_total, val_with_ann, val_ratio = _analyze_split(val_files, all_annotations)
-    logger.info("  VAL Set:")
-    logger.info(f"    Total Images: {val_total}")
-    logger.info(f"    Images w/ Annotations: {val_with_ann} ({val_ratio:.2f}%)")
+    total_ann = n_train_ann + n_val_ann + n_test_ann
+    total_img = n_train_img + n_val_img + n_test_img
 
-    total, with_ann, ratio = _analyze_split(test_files, all_annotations)
-    logger.info("  TEST Set:")
-    logger.info(f"    Total Images: {total}")
-    logger.info(f"    Images w/ Annotations: {with_ann} ({ratio:.2f}%)")
-
-    logger.info("=" * 30)
-
-    # Check if the validation set is problematic
-    if val_total > 0 and val_with_ann == 0:
-        logger.warning("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        logger.warning(
-            "CRITICAL: Your validation set contains 0 images with annotations."
+    # 2. Print formatted lines (aligned with Auto-Recommendation style)
+    def print_line(label, n_img, n_ann):
+        pct = (n_ann / total_ann * 100) if total_ann > 0 else 0
+        # Format: Label | X seals (Y%) | Z images
+        logger.info(
+            f"  {label:<6} | {n_ann:>6} seals ({pct:>5.1f}%) | {n_img:>5} images"
         )
-        logger.warning("This WILL cause NaN errors during training.")
+
+    print_line("TRAIN", n_train_img, n_train_ann)
+    print_line("VAL", n_val_img, n_val_ann)
+    print_line("TEST", n_test_img, n_test_ann)
+
+    logger.info("-" * 50)
+    logger.info(f"  TOTAL  | {total_ann:>6} seals (100.0%) | {total_img:>5} images")
+    logger.info("=" * 50)
+
+    # 3. Critical Warnings
+    if n_val_img > 0 and n_val_ann == 0:
+        logger.warning("CRITICAL WARNING")
         logger.warning(
-            "RECOMMENDATION: Use --test-dir-index to assign the empty dataset(s) to the 'test' split."
+            "Your VALIDATION set contains 0 seals. Training metrics will be NaN/useless."
         )
-        logger.warning("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        logger.warning("Please choose a different validation split.")
+
+
+def suggest_split_indices(
+    dataset_batches, train_ratio=0.8, val_ratio=0.1, test_ratio=0.1
+):
+    """
+    Calculates a recommended split based on ANNOTATION COUNTS (polygons)
+    to ensure the model sees roughly 80% of the seals in training.
+
+    Uses a greedy algorithm sorting by annotation density.
+    """
+    batch_info = []
+    total_annotations = 0
+    total_images_global = 0
+
+    # 1. Analyze contents
+    for i, batch in enumerate(dataset_batches):
+        n_imgs = len(batch["annotations"])
+        n_anns = 0
+        for data in batch["annotations"].values():
+            n_anns += len(data["polygons"])
+
+        batch_info.append(
+            {"id": i + 1, "n_imgs": n_imgs, "n_anns": n_anns, "name": batch["name"]}
+        )
+        total_annotations += n_anns
+        total_images_global += n_imgs
+
+    # 2. Sort descending by Annotation count (priority) and then Image count
+    batch_info.sort(key=lambda x: (x["n_anns"], x["n_imgs"]), reverse=True)
+
+    # 3. Calculate targets (based on Annotations)
+    target_train = total_annotations * train_ratio
+    target_val = total_annotations * val_ratio
+    target_test = total_annotations * test_ratio
+
+    # Current accumulators
+    c_train = {"anns": 0, "imgs": 0, "ids": []}
+    c_val = {"anns": 0, "imgs": 0, "ids": []}
+    c_test = {"anns": 0, "imgs": 0, "ids": []}
+
+    for batch in batch_info:
+        # Calculate deficits based on ANNOTATIONS
+        def_train = target_train - c_train["anns"]
+        def_val = target_val - c_val["anns"]
+        def_test = target_test - c_test["anns"]
+
+        # Assign to the bucket with the largest need for annotations
+        # Priority order to prevent starvation of smaller sets: Test > Val > Train
+        if def_test >= def_val and def_test >= def_train:
+            target = c_test
+        elif def_val >= def_train and def_val >= def_test:
+            target = c_val
+        else:
+            target = c_train
+
+        # Update selected bucket
+        target["ids"].append(batch["id"])
+        target["anns"] += batch["n_anns"]
+        target["imgs"] += batch["n_imgs"]
+
+    # Sort IDs strictly for display
+    c_train["ids"].sort()
+    c_val["ids"].sort()
+    c_test["ids"].sort()
+
+    return {
+        "train": c_train,
+        "val": c_val,
+        "test": c_test,
+        "total_anns": total_annotations,
+        "total_imgs": total_images_global,
+    }
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Create YOLO dataset from CVAT XML.")
+    parser = argparse.ArgumentParser(
+        description="Create YOLO dataset from CVAT XML with strict folder splitting."
+    )
 
     parser.add_argument(
         "--config",
@@ -541,22 +636,10 @@ def main():
         default=DEFAULT_CONFIG_PATH,
         help="Path to the central YAML config file.",
     )
-
     parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Run in statistics-only mode. No files will be written.",
-    )
-    parser.add_argument(
-        "--test-dir-index",
-        type=int,
-        help="Specify the 1-based index of the dataset (from --dry-run) to use as the TEST set. All other datasets will be split into train/val.",
-    )
-    parser.add_argument(
-        "--val-ratio",
-        type=float,
-        default=0.2,
-        help="The ratio of images to use for the VALIDATION set (default: 0.2).",
     )
     parser.add_argument(
         "--raw-dir",
@@ -565,12 +648,37 @@ def main():
         help=f"Base directory containing raw dataset subfolders (default: {DEFAULT_RAW_DIR})",
     )
 
+    # Optional arguments (checked manually later depending on dry-run state)
+    parser.add_argument(
+        "--train-indices",
+        nargs="+",
+        type=int,
+        help="List of 1-based dataset indices to use for TRAINING (e.g. --train-indices 1 2 3)",
+    )
+    parser.add_argument(
+        "--val-indices",
+        nargs="+",
+        type=int,
+        help="List of 1-based dataset indices to use for VALIDATION (e.g. --val-indices 4)",
+    )
+    parser.add_argument(
+        "--test-indices",
+        nargs="+",
+        type=int,
+        default=[],
+        help="List of 1-based dataset indices to use for TESTING (e.g. --test-indices 5)",
+    )
+
     args = parser.parse_args()
 
-    # Logic-Check: val_ratio must be between 0 and 1
-    if not (0.0 <= args.val_ratio <= 1.0):
-        logger.error("--val-ratio must be between 0.0 and 1.0.")
-        return
+    # --- MANUAL VALIDATION ---
+    # Enforce indices only if NOT in dry-run mode (or if user wants to see split stats in dry-run)
+    # If we are NOT in dry-run, we absolutely need train and val indices.
+    if not args.dry_run:
+        if not args.train_indices or not args.val_indices:
+            parser.error(
+                "The following arguments are required (unless --dry-run is used): --train-indices, --val-indices"
+            )
 
     config = load_config(args.config)
     if config is None:
@@ -580,14 +688,11 @@ def main():
     tile_overlap = config.get("tile_overlap")
     save_only_with_labels = config.get("save_only_with_labels")
 
-    if tile_size is None and tile_overlap is None and save_only_with_labels is None:
-        logger.error(
-            "No tiling parameters found in config file. Please specify 'imgsz', 'tile_overlap', and 'save_only_with_labels'."
-        )
+    if tile_size is None or tile_overlap is None:
+        logger.error("Missing tiling parameters in config (imgsz, tile_overlap).")
         return
 
     logger.info(f"Tile size: {tile_size}, Tile overlap: {tile_overlap}")
-    logger.info(f"Save only tiles with labels: {save_only_with_labels}")
 
     # Load Data
     dataset_batches, all_annotations = load_and_prepare_data(args.raw_dir)
@@ -595,12 +700,52 @@ def main():
         return
 
     # Print Statistics
+    # This shows the user which ID belongs to which folder
     class_names = print_dataset_statistics(dataset_batches)
 
-    # Split Data
+    # --- LOGIC FOR SPLIT ---
+    # If in dry-run and NO indices provided, suggest a split
+    if args.dry_run and not (args.train_indices or args.val_indices):
+        logger.info("=" * 40)
+        logger.info("--- 🤖 AUTO-RECOMMENDATION (Balanced by Annotations) ---")
+
+        s = suggest_split_indices(dataset_batches)
+
+        t_anns = s["total_anns"]
+
+        # Helper to format string
+        def fmt(part, label):
+            p_anns = (part["anns"] / t_anns * 100) if t_anns else 0
+            return (
+                f"  {label}: Indices {part['ids']} | "
+                f"{part['anns']} seals ({p_anns:.1f}%) | "
+                f"{part['imgs']} imgs"
+            )
+
+        logger.info(fmt(s["train"], "TRAIN"))
+        logger.info(fmt(s["val"], "VAL  "))
+        logger.info(fmt(s["test"], "TEST "))
+
+        # Construct command string
+        cmd_str = f"python create_dataset.py --train-indices {' '.join(map(str, s['train']['ids']))} --val-indices {' '.join(map(str, s['val']['ids']))}"
+        if s["test"]["ids"]:
+            cmd_str += f" --test-indices {' '.join(map(str, s['test']['ids']))}"
+
+        logger.info("To use this split, run:")
+        logger.info(f"\033[92m{cmd_str}\033[0m")
+        logger.info("=" * 40)
+
+        return
+
+    # Split Data strictly by indices
+    # We pass empty lists if None to avoid errors in split_data
     train_files, val_files, test_files = split_data(
-        dataset_batches, all_annotations, args.test_dir_index, args.val_ratio
+        dataset_batches,
+        args.train_indices or [],
+        args.val_indices or [],
+        args.test_indices or [],
     )
+
     if train_files is None:
         return
 
