@@ -228,16 +228,14 @@ The repository is currently not being actively maintained. Future updates are no
 For transparency, please note that the underlying model used throughout this project is based on **YOLOv8 by Ultralytics**.
 
 ## License
+Copyright (c) 2025 **Birds on Mars**.
 
-This project is licensed under the **MIT License**.
-All source code contained in this repository may be used, modified, and redistributed under the terms of the MIT License.
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+
+This aligns with the license of the underlying **YOLOv8** model architecture used in this project.
 
 Please note:
-
-**Training data and fine-tuned model weights are not part of the licensed materials** and are therefore not included in this repository.
-
-The model architecture referenced in this project is based on **YOLOv8**, which is licensed under **AGPL-3.0**.
-Because no model weights are distributed here, no AGPL obligations apply to this repository.
+**Training data and fine-tuned model weights are not part of the licensed materials** and are not included in this repository.
 
 For full details, see the LICENSE file.
 
