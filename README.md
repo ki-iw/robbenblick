@@ -15,7 +15,15 @@ This repository provides a complete MLOps pipeline for:
 The project is designed to follow a clear, sequential workflow:
 
 1.  **Prepare Data (`create_dataset.py`):**
-    Place raw images and CVAT `annotations.xml` files into `data/raw/`. Run the script to generate a tiled, YOLO-formatted dataset in `data/processed/` and ground truth count CSVs in `data/raw/`.
+    Organize your raw images and CVAT `annotations.xml` in `data/raw/` as shown below.
+    ```text
+    data/raw/
+    ├── dataset_01/
+    │   ├── annotations.xml
+    │   └── images/
+    └── dataset_02/ ...
+    ```
+    Run the script to generate a tiled, YOLO-formatted dataset in `data/processed/` and ground truth count CSVs.
 2.  **Tune Model (`run_experiments.py`):**
     Define a set of hyperparameters (e.g., models, freeze layers, augmentation) in `configs/base_iter_config.yaml`. Run the script to train a model for every combination and find the best performer.
 3.  **Validate Model (`yolo.py`):**
@@ -211,6 +219,27 @@ This project uses two separate configuration files, managed by `robbenblick.util
     * Now, compare the predicted counts (Step 5) with the ground truth counts (Step 2). Let's assume your "to_be_counted" folder *was* your `dataset_02`.
         `python -m robbenblick.evaluate_counts --gt-csv "data/raw/dataset_02/ground_truth_counts.csv" --pred-csv "data/final_counts/detection_counts.csv"`
     * This gives you the final MAE, RMSE, and R² metrics for your **counting task**.
+
+## Additional Notes
+This repository contains only the source code of the project. The training data and the fine-tuned model weights are not included or published.
+
+The repository is currently not being actively maintained. Future updates are not planned at this time.
+
+For transparency, please note that the underlying model used throughout this project is based on **YOLOv8 by Ultralytics**.
+
+## License
+
+This project is licensed under the **MIT License**.
+All source code contained in this repository may be used, modified, and redistributed under the terms of the MIT License.
+
+Please note:
+
+**Training data and fine-tuned model weights are not part of the licensed materials** and are therefore not included in this repository.
+
+The model architecture referenced in this project is based on **YOLOv8**, which is licensed under **AGPL-3.0**.
+Because no model weights are distributed here, no AGPL obligations apply to this repository.
+
+For full details, see the LICENSE file.
 
 ## Troubleshooting
 
