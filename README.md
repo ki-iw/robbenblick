@@ -10,6 +10,11 @@ This repository provides a complete MLOps pipeline for:
 * **Evaluation:** Assessing model performance for both detection (mAP) and counting (MAE, RMSE, R²).
 * **Visualization:** Analyzing datasets and model predictions interactively with FiftyOne.
 
+## Pretrained Model Weights
+
+Pretrained model weights are available on Hugging Face:
+ https://huggingface.co/ki-ideenwerkstatt-23/robbenblick/
+
 ## Project Workflow
 
 The project is designed to follow a clear, sequential workflow:
@@ -180,6 +185,17 @@ This project uses two separate configuration files, managed by `robbenblick.util
         --recreate
     ```
 
+### `streamlit_app.py`
+* **Purpose:** Quick test runs with the trained model of your choice for counting the seals in the image(s) and visualization.
+* **How it works:**
+    * Loads the selected YOLO model from `runs/detect/`.
+    * Upload images, run model, then displays the counts and model's predictions as image visualization.
+* **Run:**
+    ```sh
+    # View the ground truth annotations for the 'val' split
+    export PYTHONPATH=$PWD && streamlit run robbenblick/streamlit_app.py
+    ```
+
 ##  Recommended Full Workflow
 
 1.  **Add Raw Data:**
@@ -259,3 +275,30 @@ pkill -f fiftyone
 pkill -f mongod
 Then rerun your script.
 ```
+
+# Collaborators 
+
+The code for this project has been developed through a collaborative effort between [WWF Büro Ostsee](https://www.wwf.de/themen-projekte/projektregionen/ostsee) and [KI-Ideenwerkstatt](https://www.ki-ideenwerkstatt.de), technical implementation by [Birds on Mars](https://birdsonmars.com).
+
+<p></p>
+<a href="https://ki-ideenwerkstatt.de" target="_blank" rel="noopener noreferrer">
+  <img src="assets/kiiw.jpg" alt="KI Ideenwerkstatt" height="100">
+</a>
+<p></p>
+Technical realization
+<br>
+<a href="https://birdsonmars.com" target="_blank" rel="noopener noreferrer">
+  <img src="assets/bom.jpg" alt="Birds On Mars" height="100">
+</a>
+<p></p>
+An AI initiative by
+<br>
+<a href="https://www.bundesumweltministerium.de/" target="_blank" rel="noopener noreferrer">
+  <img src="assets/bmukn.svg" alt="Bundesministerium für Umwelt, Klimaschutz, Naturschutz und nukleare Sicherheit" height="100">
+</a>
+<p></p>
+In the context of
+<br>
+<a href="https://civic-coding.de" target="_blank" rel="noopener noreferrer">
+  <img src="assets/civic.svg" alt="Civic Coding" height="100">
+</a>
