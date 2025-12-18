@@ -71,21 +71,49 @@ if config_data is None:
     st.error("Could not load 'base_config.yaml'. Make sure the file exists.")
     st.stop()
 
-# Hardcoded model and inference parameters from config
+# --- Sidebar: Configuration & Model Selection ---
+
+st.sidebar.header("Model & Configuration")
+
+RUNS_DIR = Path("runs/detect")
+
+# Pull config-driven values (same as before)
 try:
-    RUN_ID = "iter_run_model_yolov8m.pt_freeze_10_epochs_150"
-    # config_data.get("run_id", "base_run")
-    MODEL_PATH = Path(f"runs/detect/{RUN_ID}/weights/best.pt")
     SLICE_SIZE = config_data["yolo_hyperparams"]["imgsz"]
-    OVERLAP_RATIO = config_data.get("tile_overlap", 0.2)
-    CONF_THRESH = config_data.get("confidence_thresh", 0.25)
 except KeyError as e:
     st.error(f"Error in 'base_config.yaml': Missing key {e}")
     st.stop()
 
-# --- Sidebar: Configuration & Model Status ---
+OVERLAP_RATIO = config_data.get("tile_overlap", 0.2)
+CONF_THRESH = config_data.get("confidence_thresh", 0.25)
 
-st.sidebar.header("Model & Configuration")
+# Collect only valid runs (those with weights/best.pt)
+run_folders = [
+    p.name for p in RUNS_DIR.iterdir()
+    if p.is_dir() and (p / "weights" / "best.pt").exists()
+] if RUNS_DIR.exists() else []
+
+if not run_folders:
+    st.sidebar.error(f"No valid YOLO runs found in {RUNS_DIR}")
+    st.stop()
+
+run_folders = sorted(run_folders)
+
+# Default to last selected run or most recent one
+default_run = st.session_state.get("selected_run", run_folders[-1])
+
+RUN_ID = st.sidebar.selectbox(
+    "Select YOLO Model",
+    options=run_folders,
+    index=run_folders.index(default_run) if default_run in run_folders else len(run_folders) - 1,
+)
+
+st.session_state["selected_run"] = RUN_ID
+
+MODEL_PATH = RUNS_DIR / RUN_ID / "weights" / "best.pt"
+
+# --- Sidebar: Model Status ---
+
 st.sidebar.info(f"**Run ID:** `{RUN_ID}`")
 st.sidebar.info(f"**Model Path:** `{MODEL_PATH}`")
 
@@ -94,6 +122,7 @@ if MODEL_PATH.exists():
 else:
     st.sidebar.error("Model file (best.pt) NOT found!")
     st.stop()
+
 
 st.sidebar.subheader("Inference Parameters")
 st.sidebar.markdown(f"**Confidence Threshold:** `{CONF_THRESH}`")
@@ -113,7 +142,7 @@ USE_DOWNSAMPLING = st.sidebar.checkbox(
 st.header("1. Upload Images")
 uploaded_files = st.file_uploader(
     "Choose JPG, PNG, or TIF images",
-    type=["jpg", "jpeg", "png", "tif", "tiff"],
+    type=["jpg", "jpeg", "png", "tif", "tiff", "webp"],
     accept_multiple_files=True,
 )
 
