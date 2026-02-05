@@ -57,6 +57,9 @@ def parse_cvat_xml(xml_file):
             "polygons": polygons,
         }
 
+        # Find also <box> tags.
+        annotation_tags = image_tag.findall("box")
+
         for box_tag in annotation_tags:
             label = poly_tag.get("label")
             class_names.add(label)
@@ -164,10 +167,10 @@ def find_labels_for_tile(img_annotations, tile_coords, tile_dims, class_to_id):
 
 def save_tile(tile_img, tile_labels, base_filename, img_output_dir, label_output_dir):
     """Saves a single tile image and its corresponding label file."""
-    img_save_path = img_output_dir / f"{base_filename}.jpg"
+    img_save_path = img_output_dir / f"{base_filename}.webp"
     label_save_path = label_output_dir / f"{base_filename}.txt"
 
-    cv2.imwrite(str(img_save_path), tile_img)
+    cv2.imwrite(str(img_save_path), tile_img, [cv2.IMWRITE_WEBP_QUALITY, 100])
 
     with open(label_save_path, "w") as f:
         f.write("\n".join(tile_labels))
@@ -191,7 +194,7 @@ def tile_one_image(
         logger.warning(f"Image file not found for {image_path.name}, skipping.")
         return
 
-    img = cv2.imread(str(image_path))
+    img = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
     if img is None:
         logger.warning(f"Could not read image {image_path.name}, skipping.")
         return
