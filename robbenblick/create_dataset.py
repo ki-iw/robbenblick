@@ -57,6 +57,18 @@ def parse_cvat_xml(xml_file):
             "polygons": polygons,
         }
 
+        for box_tag in annotation_tags:
+            label = poly_tag.get("label")
+            class_names.add(label)
+            points = [(float(box_tag.get("xtl")), float(box_tag.get("ytl"))), (float(box_tag.get("xbr")), float(box_tag.get("ybr")))]
+            polygons.append({"label": label, "points": points})
+
+        annotations[image_name] = {
+            "width": width,
+            "height": height,
+            "polygons": polygons,
+        }
+
     return annotations, sorted(list(class_names)), task_name
 
 
