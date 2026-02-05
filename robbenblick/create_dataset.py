@@ -50,6 +50,15 @@ def parse_cvat_xml(xml_file):
             points = [tuple(map(float, p.split(","))) for p in points_str.split(";")]
             polygons.append({"label": label, "points": points})
 
+        # Also find <box> tags.
+        annotation_tags = image_tag.findall("box")
+
+        for box_tag in annotation_tags:
+            label = poly_tag.get("label")
+            class_names.add(label)
+            points = [(float(box_tag.get("xtl")), float(box_tag.get("ytl"))), (float(box_tag.get("xbr")), float(box_tag.get("ybr")))]
+            polygons.append({"label": label, "points": points})
+
         annotations[image_name] = {
             "width": width,
             "height": height,
